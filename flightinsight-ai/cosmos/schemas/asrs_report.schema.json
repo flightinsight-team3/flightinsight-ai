@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "asrs_reports document",
+  "description": "One NASA ASRS safety report. Partition key: /month_key. Vector: /narrative_vector (768-d, cosine).",
+  "type": "object",
+  "required": ["id", "month_key", "synopsis", "narrative", "narrative_vector"],
+  "properties": {
+    "id": { "type": "string", "description": "ASRS ACN (report number)" },
+    "month_key": { "type": "integer", "minimum": 200001, "maximum": 210012 },
+    "airport_code": { "type": ["string", "null"] },
+    "aircraft_family": { "type": ["string", "null"] },
+    "flight_phase": { "type": "array", "items": { "type": "string" } },
+    "weather": { "type": "array", "items": { "type": "string" } },
+    "reporter": { "type": ["string", "null"] },
+    "anomaly": { "type": "array", "items": { "type": "string" } },
+    "synopsis": { "type": "string" },
+    "narrative": { "type": "string" },
+    "narrative_vector": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 768,
+      "maxItems": 768,
+      "description": "nomic-embed-text embedding of 'search_document: ' + synopsis + narrative"
+    }
+  }
+}
