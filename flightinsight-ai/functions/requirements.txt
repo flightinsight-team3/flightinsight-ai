@@ -1,0 +1,11 @@
+# Packages installed in the Function App (remote build) and in CI.
+azure-functions
+azure-identity
+azure-storage-file-datalake
+azure-keyvault-secrets
+azure-cosmos
+gremlinpython
+pandas
+pyarrow
+pyodbc
+requests

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "route_summaries document",
+  "description": "One document per route and month. Built from vw_route_summary in Azure SQL. Partition key: /origin.",
+  "type": "object",
+  "required": ["id", "route_key", "origin", "dest", "month_key", "totals"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[A-Z]{3}-[A-Z]{3}-[0-9]{6}$", "description": "ORIGIN-DEST-yyyymm" },
+    "route_key": { "type": "integer" },
+    "origin": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "dest": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "month_key": { "type": "integer", "minimum": 200001, "maximum": 210012 },
+    "distance_mi": { "type": ["integer", "null"] },
+    "totals": { "$ref": "#/$defs/stats" },
+    "by_airline": {
+      "type": "array",
+      "items": {
+        "allOf": [{ "$ref": "#/$defs/stats" }],
+        "required": ["carrier_code"],
+        "properties": { "carrier_code": { "type": "string" } }
+      }
+    },
+    "delay_causes_min": {
+      "type": "object",
+      "properties": {
+        "carrier": { "type": "integer" },
+        "weather": { "type": "integer" },
+        "nas": { "type": "integer" },
+        "security": { "type": "integer" },
+        "late_aircraft": { "type": "integer" }
+      }
+    },
+    "best_departure_hours": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 0, "maximum": 23 },
+      "description": "Local departure hours with the best on-time rate"
+    }
+  },
+  "$defs": {
+    "stats": {
+      "type": "object",
+      "required": ["flights"],
+      "properties": {
+        "flights": { "type": "integer", "minimum": 0 },
+        "cancelled": { "type": "integer", "minimum": 0 },
+        "diverted": { "type": "integer", "minimum": 0 },
+        "on_time_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "avg_arr_delay_min": { "type": ["number", "null"] },
+        "p90_arr_delay_min": { "type": ["number", "null"] },
+        "weather_delay_share": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}
