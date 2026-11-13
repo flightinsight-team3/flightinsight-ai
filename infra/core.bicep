@@ -1,6 +1,7 @@
-// Core data platform, deployed into rg-flightinsight-core (core subscription):
+// The whole FlightInsight platform, deployed into rg-flightinsight-core:
 //   Data Lake (raw/clean files), Azure SQL with two free databases (prod + dev),
-//   Key Vault, Data Factory, and a Flex Consumption Function App for the Python ETL.
+//   Key Vault, Data Factory, a Flex Consumption Function App for the Python ETL,
+//   and two Cosmos DB accounts (NoSQL with vector search, Gremlin graph).
 // Service-to-service permissions (managed identities) are granted at the bottom of this file.
 
 @description('Region for all resources. Defaults to the resource group region.')
@@ -8,6 +9,9 @@ param location string = resourceGroup().location
 
 @description('Region for Azure SQL only. Change to eastus2 if the default region blocks SQL provisioning.')
 param sqlLocation string = location
+
+@description('Region for both Cosmos DB accounts. Change if the default region reports no capacity.')
+param cosmosLocation string = location
 
 @description('Short prefix used in every resource name.')
 param prefix string = 'fi'
@@ -37,6 +41,8 @@ var names = {
   dataFactory: 'adf-${prefix}-${suffix}'
   plan: 'plan-${prefix}-${suffix}'
   functionApp: 'func-${prefix}-${suffix}'
+  cosmosNoSql: 'cosmos-${prefix}-nosql-${suffix}'
+  cosmosGraph: 'cosmos-${prefix}-graph-${suffix}'
 }
 
 var sqlDatabases = [
@@ -173,6 +179,64 @@ resource adf 'Microsoft.DataFactory/factories@2018-06-01' = {
   properties: {}
 }
 
+// ---------------------------------------------------------------- Cosmos DB
+// Only one free-tier Cosmos account is allowed per subscription:
+//   NoSQL (read and written most) uses the free tier; Gremlin is serverless (pay per request).
+module cosmosNoSql 'nosql.bicep' = {
+  name: 'cosmos-nosql'
+  params: {
+    location: cosmosLocation
+    prefix: prefix
+    accountName: names.cosmosNoSql
+    enableFreeTier: true
+    tags: tags
+    // ADF and Functions read/write documents with their managed identities, no keys needed.
+    dataContributorPrincipalIds: [
+      adf.identity.principalId
+      functionApp.identity.principalId
+    ]
+  }
+}
+
+module cosmosGraph 'graph.bicep' = {
+  name: 'cosmos-graph'
+  params: {
+    location: cosmosLocation
+    prefix: prefix
+    accountName: names.cosmosGraph
+    serverless: true
+    tags: tags
+  }
+}
+
+resource cosmosNoSqlAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' existing = {
+  name: names.cosmosNoSql
+}
+
+resource cosmosGraphAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' existing = {
+  name: names.cosmosGraph
+}
+
+// NoSQL key: only for laptop scripts (scripts/embed_asrs.py). ADF and Functions use their identities.
+resource cosmosNoSqlKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: kv
+  name: 'cosmos-nosql-key'
+  properties: {
+    value: cosmosNoSqlAccount.listKeys().primaryMasterKey
+  }
+  dependsOn: [cosmosNoSql]
+}
+
+// Gremlin key: required, because the Gremlin API supports key authentication only.
+resource cosmosGraphKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: kv
+  name: 'cosmos-graph-key'
+  properties: {
+    value: cosmosGraphAccount.listKeys().primaryMasterKey
+  }
+  dependsOn: [cosmosGraph]
+}
+
 // ---------------------------------------------------------------- Function App (Flex Consumption)
 // Separate standard storage account: the Functions runtime does not use a hierarchical-namespace account.
 resource funcStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
@@ -230,7 +294,7 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         }
       }
       scaleAndConcurrency: {
-        maximumInstanceCount: 5
+        maximumInstanceCount: 40 // lowest value Flex Consumption allows
         instanceMemoryMB: 2048
       }
       runtime: {
@@ -246,6 +310,14 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         // Key Vault references: the app reads the secret with its own identity at startup.
         { name: 'SQL_CONNECTION_STRING', value: '@Microsoft.KeyVault(SecretUri=${sqlOdbcSecret[0].properties.secretUri})' }
         { name: 'SQL_CONNECTION_STRING_DEV', value: '@Microsoft.KeyVault(SecretUri=${sqlOdbcSecret[1].properties.secretUri})' }
+        // Endpoints are built from names (not module outputs) to avoid a dependency cycle:
+        // the NoSQL module needs the Function App's identity first.
+        { name: 'COSMOS_NOSQL_ENDPOINT', value: 'https://${names.cosmosNoSql}.documents.azure.com:443/' }
+        { name: 'COSMOS_NOSQL_DATABASE', value: 'flightinsight' }
+        { name: 'COSMOS_GREMLIN_ENDPOINT', value: 'wss://${names.cosmosGraph}.gremlin.cosmos.azure.com:443/' }
+        { name: 'COSMOS_GREMLIN_DATABASE', value: 'flightinsight' }
+        { name: 'COSMOS_GREMLIN_GRAPH', value: 'route_network' }
+        { name: 'COSMOS_GREMLIN_KEY', value: '@Microsoft.KeyVault(SecretUri=${cosmosGraphKeySecret.properties.secretUri})' }
       ]
     }
   }
@@ -309,3 +381,5 @@ output sqlServerFqdn string = sqlHost
 output keyVaultName string = kv.name
 output dataFactoryName string = adf.name
 output functionAppName string = functionApp.name
+output cosmosNoSqlName string = names.cosmosNoSql
+output cosmosGraphName string = names.cosmosGraph

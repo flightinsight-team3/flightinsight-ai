@@ -11,20 +11,14 @@ flowchart TB
     ASRS[NASA ASRS export]
   end
 
-  subgraph core["Core subscription · rg-flightinsight-core"]
+  subgraph rg["rg-flightinsight-core (one subscription)"]
     ADF[Data Factory<br/>orchestration]
     FN[Azure Functions<br/>Python ETL]
     LAKE[(Data Lake<br/>raw / clean)]
-    SQL[(Azure SQL<br/>staging → star schema → views)]
+    SQL[(Azure SQL · Canada Central<br/>staging → star schema → views)]
     KV[Key Vault]
-  end
-
-  subgraph nosql["NoSQL subscription"]
-    DOCS[(Cosmos NoSQL<br/>route_summaries · asrs_reports + vectors)]
-  end
-
-  subgraph graph["Graph subscription"]
-    G[(Cosmos Gremlin<br/>route_network)]
+    DOCS[(Cosmos NoSQL · free tier<br/>route_summaries · asrs_reports + vectors)]
+    G[(Cosmos Gremlin · serverless<br/>route_network)]
   end
 
   LAPTOP[Laptop: Ollama embeddings<br/>scripts/embed_asrs.py]
@@ -61,8 +55,10 @@ ASRS embeddings are a one-off batch run from a laptop, not part of the monthly p
 | ADF + Azure Functions instead of local Airflow | Fully cloud-hosted and deployable by CI/CD; no always-on Airflow server to pay for; the data is a 2024 backfill so orchestration needs are light |
 | Data Lake landing zone (`raw` / `clean`) | Re-runs don't re-download; raw files are kept for audit |
 | Each `ingest` / `load` is a separate Function call | The ADF Azure Function activity times out at about 230 s |
-| Components spread across three student subscriptions | Each subscription gets its own Azure SQL free offer and one Cosmos free-tier account |
+| All resources in one subscription and resource group | One GitHub environment and one OIDC identity; services authorize each other with managed identities, no cross-subscription keys |
+| Cosmos NoSQL on the free tier, Gremlin serverless | Only one free-tier Cosmos account is allowed per subscription; NoSQL is used most, the graph is loaded once a year and queried lightly |
+| Azure SQL in Canada Central, everything else in West US 2 | The subscription may only use five regions, and SQL provisioning is restricted in West US 2; cross-region latency is irrelevant for batch ETL |
 | Two SQL databases: `flightinsight` (prod) and `flightinsight-dev` | Free; experiments in dev can't break the pipeline; prod changes only via `main` |
 | No local databases or Docker | Everyone works against the same cloud state; the SQL project is validated in CI without a database |
 | SQL Database Project (declarative) instead of migration scripts | The repo always shows each table's current shape; CI catches broken references; data-loss changes are blocked |
-| Cosmos throughput hard-capped at 1000 RU/s | Stays inside the free tier |
+| Cosmos NoSQL throughput hard-capped at 1000 RU/s | Stays inside the free tier |

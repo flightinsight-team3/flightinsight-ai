@@ -1,10 +1,17 @@
-// Cosmos DB for Apache Gremlin (route network graph), deployed into rg-flightinsight-graph.
-// Free tier: 1000 RU/s and 25 GB free; totalThroughputLimit keeps the account inside it.
+// Cosmos DB for Apache Gremlin (route network graph). Used as a module by core.bicep.
+// serverless = true: pay per request, for when the subscription's free tier is used by another account.
+// Note: the Gremlin API supports key authentication only (no managed-identity data access).
 
 param location string = resourceGroup().location
 param prefix string = 'fi'
 
-@description('Only one free-tier Cosmos account is allowed per subscription.')
+@description('Cosmos account name (globally unique).')
+param accountName string = 'cosmos-${prefix}-graph-${take(uniqueString(resourceGroup().id), 6)}'
+
+@description('Serverless capacity mode: no free tier, no provisioned throughput, billed per request.')
+param serverless bool = false
+
+@description('Only one free-tier Cosmos account per subscription. Ignored when serverless.')
 param enableFreeTier bool = true
 
 param tags object = {
@@ -14,29 +21,29 @@ param tags object = {
   component: 'graph'
 }
 
-var suffix = take(uniqueString(resourceGroup().id), 6)
+var baseProperties = {
+  databaseAccountOfferType: 'Standard'
+  enableFreeTier: serverless ? false : enableFreeTier
+  locations: [
+    {
+      locationName: location
+      failoverPriority: 0
+      isZoneRedundant: false
+    }
+  ]
+  consistencyPolicy: { defaultConsistencyLevel: 'Session' }
+  capabilities: serverless ? [{ name: 'EnableGremlin' }, { name: 'EnableServerless' }] : [{ name: 'EnableGremlin' }]
+}
+
+// Provisioned mode only: cap throughput so the account stays inside the free tier.
+var capacityProperties = serverless ? {} : { capacity: { totalThroughputLimit: 1000 } }
 
 resource account 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
-  name: 'cosmos-${prefix}-graph-${suffix}'
+  name: accountName
   location: location
   tags: tags
   kind: 'GlobalDocumentDB'
-  properties: {
-    databaseAccountOfferType: 'Standard'
-    enableFreeTier: enableFreeTier
-    locations: [
-      {
-        locationName: location
-        failoverPriority: 0
-        isZoneRedundant: false
-      }
-    ]
-    consistencyPolicy: { defaultConsistencyLevel: 'Session' }
-    capabilities: [
-      { name: 'EnableGremlin' }
-    ]
-    capacity: { totalThroughputLimit: 1000 }
-  }
+  properties: union(baseProperties, capacityProperties)
 }
 
 resource db 'Microsoft.DocumentDB/databaseAccounts/gremlinDatabases@2024-11-15' = {
@@ -44,7 +51,7 @@ resource db 'Microsoft.DocumentDB/databaseAccounts/gremlinDatabases@2024-11-15' 
   name: 'flightinsight'
   properties: {
     resource: { id: 'flightinsight' }
-    options: { throughput: 1000 }
+    options: serverless ? {} : { throughput: 1000 }
   }
 }
 

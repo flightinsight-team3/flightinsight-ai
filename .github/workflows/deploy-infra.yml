@@ -1,14 +1,14 @@
 name: Deploy infrastructure
 
 # Manual only: Actions → Deploy infrastructure → Run workflow → choose a component.
-# Each component deploys into a different student subscription (see docs/azure-cicd-setup.md).
+# Everything lives in rg-flightinsight-core (see docs/azure-cicd-setup.md).
 on:
   workflow_dispatch:
     inputs:
       component:
         description: Component to deploy
         type: choice
-        options: [core, nosql, graph]
+        options: [core]
       apply:
         description: Apply changes (unchecked = preview only)
         type: boolean

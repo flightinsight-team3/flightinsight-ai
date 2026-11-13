@@ -1,11 +1,17 @@
-// Cosmos DB for NoSQL (documents + vector search), deployed into rg-flightinsight-nosql.
+// Cosmos DB for NoSQL (documents + vector search). Used as a module by core.bicep.
 // Free tier: 1000 RU/s and 25 GB free. totalThroughputLimit caps the account so it can never exceed that.
 
 param location string = resourceGroup().location
 param prefix string = 'fi'
 
+@description('Cosmos account name (globally unique).')
+param accountName string = 'cosmos-${prefix}-nosql-${take(uniqueString(resourceGroup().id), 6)}'
+
 @description('Only one free-tier Cosmos account is allowed per subscription.')
 param enableFreeTier bool = true
+
+@description('Managed identity principal IDs that get read/write access to documents (Cosmos data-plane RBAC).')
+param dataContributorPrincipalIds array = []
 
 param tags object = {
   project: 'flightinsight'
@@ -14,10 +20,8 @@ param tags object = {
   component: 'nosql'
 }
 
-var suffix = take(uniqueString(resourceGroup().id), 6)
-
 resource account 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
-  name: 'cosmos-${prefix}-nosql-${suffix}'
+  name: accountName
   location: location
   tags: tags
   kind: 'GlobalDocumentDB'
@@ -105,6 +109,21 @@ resource asrsReports 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/contain
     }
   }
 }
+
+// Cosmos DB Built-in Data Contributor: read/write documents without account keys.
+var dataContributorRoleId = '00000000-0000-0000-0000-000000000002'
+
+resource dataContributors 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = [
+  for principalId in dataContributorPrincipalIds: {
+    parent: account
+    name: guid(account.id, principalId, dataContributorRoleId)
+    properties: {
+      roleDefinitionId: '${account.id}/sqlRoleDefinitions/${dataContributorRoleId}'
+      principalId: principalId
+      scope: account.id
+    }
+  }
+]
 
 output accountName string = account.name
 output endpoint string = account.properties.documentEndpoint
