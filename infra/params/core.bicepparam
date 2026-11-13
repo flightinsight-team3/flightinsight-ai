@@ -2,8 +2,8 @@ using '../core.bicep'
 
 param location = 'westus2'
 
+// Azure SQL is restricted in westus2 for this subscription, so it lives in Canada Central.
+param sqlLocation = 'canadacentral'
+
 // The password is read from the environment (GitHub secret SQL_ADMIN_PASSWORD), never stored here.
 param sqlAdminPassword = readEnvironmentVariable('SQL_ADMIN_PASSWORD')
-
-// Uncomment if Azure SQL is blocked in the chosen region:
-// param sqlLocation = 'canadacentral'
