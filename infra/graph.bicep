@@ -14,6 +14,12 @@ param serverless bool = false
 @description('Only one free-tier Cosmos account per subscription. Ignored when serverless.')
 param enableFreeTier bool = true
 
+@description('Key Vault to store the account key in. Empty = skip.')
+param keyVaultName string = ''
+
+@description('Name of the Key Vault secret for the account key.')
+param keySecretName string = 'cosmos-graph-key'
+
 param tags object = {
   project: 'flightinsight'
   team: 'team3'
@@ -67,6 +73,14 @@ resource graph 'Microsoft.DocumentDB/databaseAccounts/gremlinDatabases/graphs@20
         kind: 'Hash'
       }
     }
+  }
+}
+
+// Store the account key in Key Vault (read here, after the account exists).
+resource keySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(keyVaultName)) {
+  name: '${keyVaultName}/${keySecretName}'
+  properties: {
+    value: account.listKeys().primaryMasterKey
   }
 }
 

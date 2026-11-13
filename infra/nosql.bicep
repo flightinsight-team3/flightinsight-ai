@@ -13,6 +13,12 @@ param enableFreeTier bool = true
 @description('Managed identity principal IDs that get read/write access to documents (Cosmos data-plane RBAC).')
 param dataContributorPrincipalIds array = []
 
+@description('Key Vault to store the account key in. Empty = skip.')
+param keyVaultName string = ''
+
+@description('Name of the Key Vault secret for the account key.')
+param keySecretName string = 'cosmos-nosql-key'
+
 param tags object = {
   project: 'flightinsight'
   team: 'team3'
@@ -124,6 +130,14 @@ resource dataContributors 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignme
     }
   }
 ]
+
+// Store the account key in Key Vault (read here, after the account exists).
+resource keySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(keyVaultName)) {
+  name: '${keyVaultName}/${keySecretName}'
+  properties: {
+    value: account.listKeys().primaryMasterKey
+  }
+}
 
 output accountName string = account.name
 output endpoint string = account.properties.documentEndpoint

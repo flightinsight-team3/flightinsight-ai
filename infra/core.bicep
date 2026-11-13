@@ -190,6 +190,8 @@ module cosmosNoSql 'nosql.bicep' = {
     accountName: names.cosmosNoSql
     enableFreeTier: true
     tags: tags
+    keyVaultName: kv.name
+    keySecretName: 'cosmos-nosql-key'
     // ADF and Functions read/write documents with their managed identities, no keys needed.
     dataContributorPrincipalIds: [
       adf.identity.principalId
@@ -206,35 +208,9 @@ module cosmosGraph 'graph.bicep' = {
     accountName: names.cosmosGraph
     serverless: true
     tags: tags
+    keyVaultName: kv.name
+    keySecretName: 'cosmos-graph-key'
   }
-}
-
-resource cosmosNoSqlAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' existing = {
-  name: names.cosmosNoSql
-}
-
-resource cosmosGraphAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' existing = {
-  name: names.cosmosGraph
-}
-
-// NoSQL key: only for laptop scripts (scripts/embed_asrs.py). ADF and Functions use their identities.
-resource cosmosNoSqlKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: kv
-  name: 'cosmos-nosql-key'
-  properties: {
-    value: cosmosNoSqlAccount.listKeys().primaryMasterKey
-  }
-  dependsOn: [cosmosNoSql]
-}
-
-// Gremlin key: required, because the Gremlin API supports key authentication only.
-resource cosmosGraphKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: kv
-  name: 'cosmos-graph-key'
-  properties: {
-    value: cosmosGraphAccount.listKeys().primaryMasterKey
-  }
-  dependsOn: [cosmosGraph]
 }
 
 // ---------------------------------------------------------------- Function App (Flex Consumption)
@@ -317,10 +293,11 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'COSMOS_GREMLIN_ENDPOINT', value: 'wss://${names.cosmosGraph}.gremlin.cosmos.azure.com:443/' }
         { name: 'COSMOS_GREMLIN_DATABASE', value: 'flightinsight' }
         { name: 'COSMOS_GREMLIN_GRAPH', value: 'route_network' }
-        { name: 'COSMOS_GREMLIN_KEY', value: '@Microsoft.KeyVault(SecretUri=${cosmosGraphKeySecret.properties.secretUri})' }
+        { name: 'COSMOS_GREMLIN_KEY', value: '@Microsoft.KeyVault(SecretUri=${kv.properties.vaultUri}secrets/cosmos-graph-key/)' }
       ]
     }
   }
+  dependsOn: [cosmosGraph]
 }
 
 // ---------------------------------------------------------------- Service permissions
