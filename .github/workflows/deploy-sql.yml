@@ -1,0 +1,71 @@
+name: Deploy SQL schema
+
+# Merge to main touching sql/ → deploys to the prod database (flightinsight).
+# Manual run → choose dev or prod. Pick your own branch to try it on the dev database first.
+on:
+  push:
+    branches: [main]
+    paths: ["sql/**"]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Database to deploy to
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-sql-${{ inputs.target || 'prod' }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: core
+    env:
+      TARGET: ${{ inputs.target || 'prod' }}
+      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+      SQL_SERVER: ${{ vars.SQL_SERVER_NAME }}
+    steps:
+      - name: Only main may deploy to prod
+        if: ${{ env.TARGET == 'prod' && github.ref != 'refs/heads/main' }}
+        run: |
+          echo "::error::Deploy your branch to dev, or merge it into main to deploy to prod."
+          exit 1
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Open SQL firewall for this runner
+        run: |
+          IP=$(curl -fsS https://api.ipify.org)
+          az sql server firewall-rule create -g "$RG" -s "$SQL_SERVER" \
+            -n "github-${{ github.run_id }}" --start-ip-address "$IP" --end-ip-address "$IP" -o none
+
+      # Builds the .sqlproj, compares it with the target database and applies only the differences.
+      # BlockOnPossibleDataLoss stops the deployment if a change would drop data.
+      - name: Publish schema
+        uses: azure/sql-action@v2
+        with:
+          connection-string: ${{ env.TARGET == 'prod' && secrets.SQL_CONNECTION_STRING_PROD || secrets.SQL_CONNECTION_STRING_DEV }}
+          path: sql/FlightInsight/FlightInsight.sqlproj
+          action: publish
+          arguments: /p:BlockOnPossibleDataLoss=true
+
+      - name: Close SQL firewall
+        if: always()
+        run: |
+          az sql server firewall-rule delete -g "$RG" -s "$SQL_SERVER" \
+            -n "github-${{ github.run_id }}" -o none || true

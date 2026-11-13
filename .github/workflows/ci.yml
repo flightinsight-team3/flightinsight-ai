@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python lint and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt -r functions/requirements.txt
+      - name: Lint
+        run: ruff check .
+      - name: Test
+        run: pytest -q
+
+  sql:
+    name: Build SQL project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      # Compiling the project validates every table, view and procedure against each other
+      # (missing columns, broken foreign keys, typos) without needing a database.
+      - name: Build dacpac
+        run: dotnet build sql/FlightInsight/FlightInsight.sqlproj -c Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dacpac
+          path: sql/FlightInsight/bin/Release/*.dacpac
+
+  bicep:
+    name: Compile Bicep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Bicep
+        run: az bicep install
+      - name: Build every template
+        run: |
+          for f in infra/*.bicep; do
+            echo "Compiling $f"
+            az bicep build --file "$f" --stdout > /dev/null
+          done
