@@ -49,13 +49,15 @@ resource account 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
   }
 }
 
-// Shared throughput: both containers share the free 1000 RU/s.
+// Shared throughput (400 RU/s) for route_summaries and any future plain containers.
+// asrs_reports has its own 400 RU/s, because vector indexes don't support shared throughput.
+// Total 800 RU/s stays inside the free tier (1000 RU/s).
 resource db 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-11-15' = {
   parent: account
   name: 'flightinsight'
   properties: {
     resource: { id: 'flightinsight' }
-    options: { throughput: 1000 }
+    options: { throughput: 400 }
   }
 }
 
@@ -113,6 +115,7 @@ resource asrsReports 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/contain
         ]
       }
     }
+    options: { throughput: 400 } // dedicated: required for vector indexing
   }
 }
 
