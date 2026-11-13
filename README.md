@@ -11,7 +11,7 @@ Data Lake, structured data goes into an Azure SQL star schema, and aggregates fl
 
 | I'm working on… | Put it in | How it reaches Azure |
 |---|---|---|
-| Azure resources (storage, SQL server, Cosmos accounts, ADF, Key Vault, Function App) | `infra/` (Bicep) | **Deploy infrastructure** workflow (manual) |
+| Azure resources (storage, SQL server, Cosmos accounts, ADF, Key Vault, Function App) | `infra/` (Bicep; `core.bicep` is the entry point) | **Deploy infrastructure** workflow (manual) |
 | Tables, views, stored procedures | `sql/FlightInsight/` | **Deploy SQL schema** workflow (automatic on merge) |
 | Python ETL logic (download, clean, UTC, validate, load) | `functions/etl/` | **Deploy Functions** workflow (automatic on merge) |
 | HTTP endpoints that ADF calls | `functions/function_app.py` | **Deploy Functions** workflow |
@@ -39,19 +39,18 @@ Merging into `main` deploys automatically, so `main` always matches what is runn
 | `ci.yml` | Every PR and every push to `main` | Lints and tests Python, builds the SQL project (catches broken tables/views without a database), compiles Bicep |
 | `deploy-sql.yml` | Merge to `main` touching `sql/` → **prod** database. Manual run → choose **dev** or **prod** | Publishes the schema with data-loss protection on |
 | `deploy-functions.yml` | Merge to `main` touching `functions/` | Deploys the Function App |
-| `deploy-infra.yml` | Manual only | Previews (what-if) and deploys Bicep for one component: `core`, `nosql` or `graph` |
+| `deploy-infra.yml` | Manual only | Previews (what-if) and, with *apply* checked, deploys `infra/core.bicep` |
 
 **Try your branch on the dev database:** Actions → Deploy SQL schema → Run workflow → pick your branch → target `dev`.
 
 ## Azure layout
 
-Each component lives in a different student subscription so each gets its own free allowance.
+Everything lives in one subscription and one resource group, deployed by the `core` GitHub environment.
 
-| GitHub environment | Resource group | Contains |
+| Resource group | Region | Contains |
 |---|---|---|
-| `core` | `rg-flightinsight-core` | Data Lake, Azure SQL (`flightinsight` + `flightinsight-dev`), Key Vault, Data Factory, Function App |
-| `nosql` | `rg-flightinsight-nosql` | Cosmos DB for NoSQL: `route_summaries`, `asrs_reports` (vector search) |
-| `graph` | `rg-flightinsight-graph` | Cosmos DB for Gremlin: `route_network` graph |
+| `rg-flightinsight-core` | West US 2 | Data Lake, Key Vault, Data Factory, Function App, Cosmos DB for NoSQL (`route_summaries`, `asrs_reports` with vector search, free tier), Cosmos DB for Gremlin (`route_network`, serverless) |
+| | Canada Central | Azure SQL (`flightinsight` + `flightinsight-dev`, free offer) — SQL is not available in West US 2 for this subscription |
 
 One-time setup for connecting GitHub to Azure: [docs/azure-cicd-setup.md](docs/azure-cicd-setup.md).
 

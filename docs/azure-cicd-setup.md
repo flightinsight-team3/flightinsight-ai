@@ -1,69 +1,79 @@
 # Connecting GitHub Actions to Azure (one-time setup)
 
-GitHub Actions logs in to Azure with **OIDC**: no password or key is stored in GitHub. Each subscription
-trusts one GitHub *environment* of this repository through a **user-assigned managed identity**.
+GitHub Actions logs in to Azure with **OIDC**: no password or key is stored in GitHub.
+The resource group trusts the `core` environment of this repository through a **user-assigned managed identity**.
 
-| GitHub environment | Subscription owner | Resource group | Managed identity |
-|---|---|---|---|
-| `core` | (core owner) | `rg-flightinsight-core` | `id-github-core` |
-| `nosql` | (nosql owner) | `rg-flightinsight-nosql` | `id-github-nosql` |
-| `graph` | (graph owner) | `rg-flightinsight-graph` | `id-github-graph` |
+| Item | Value |
+|---|---|
+| Subscription | Azure for Students - JinkunZhao (`8d99dfdf-a6d2-4bd6-b2b6-5f4d059d1b47`) |
+| Resource group | `rg-flightinsight-core` |
+| GitHub environment | `core` |
+| Managed identity | `id-github-core` |
+| Allowed regions (student policy) | westus2, canadacentral, norwayeast, francecentral, belgiumcentral |
+| Regions used | West US 2 for everything except Azure SQL (Canada Central) |
 
-All three subscriptions must use the same region (East US).
+## Part A — in Azure (subscription owner)
 
-## Part A — in Azure (each subscription owner, for their own row)
-
-1. **Resource group.** Create it if it doesn't exist (tags: `project=flightinsight`, `team=team3`, `env=dev`, `component=<core|nosql|graph>`).
-2. **Managed identity.** Portal → *Managed Identities* → Create → your subscription, your resource group,
-   name `id-github-<environment>`, same region.
-3. **Permissions.** Resource group → *Access control (IAM)* → Add role assignment:
-   - **Contributor** → Members: *Managed identity* → `id-github-<environment>`.
-   - **core only:** also **Role Based Access Control Administrator** → same identity
-     (`core.bicep` grants ADF and Functions access to the Data Lake and Key Vault).
-4. **Federated credential.** Open the managed identity → *Federated credentials* → Add credential:
-   - Scenario: **GitHub Actions deploying Azure resources**
-   - Organization: the GitHub organization name · Repository: `flightinsight-ai`
-   - Entity: **Environment** · Environment: `core` / `nosql` / `graph` (must match exactly)
-   - Name: `github-<environment>`
-5. **Write down** from the identity's *Overview*: **Client ID**; and your **Tenant ID** and **Subscription ID**.
+1. **Register resource providers** (Subscription → *Settings* → *Resource providers* → Register):
+   `Microsoft.Storage`, `Microsoft.Sql`, `Microsoft.DataFactory`, `Microsoft.KeyVault`, `Microsoft.Web`,
+   `Microsoft.DocumentDB`, `Microsoft.Insights`. The deployment identity is scoped to the resource group and
+   cannot register providers itself.
+2. **Managed identity.** *Managed Identities* → Create → resource group `rg-flightinsight-core`,
+   region **West US 2**, name `id-github-core`.
+3. **Permissions.** Resource group → *Access control (IAM)* → Add role assignment → tab
+   **Privileged administrator roles** → Members: *Managed identity* → `id-github-core`:
+   - **Contributor**
+   - **Role Based Access Control Administrator**, condition: *assign all roles except privileged administrator
+     roles* (`core.bicep` grants ADF and Functions data roles on the lake and Key Vault).
+4. **Federated credential.** Identity → *Federated credentials* → Add → **GitHub Actions deploying Azure resources**:
+   organization `flightinsight-team3` + its numeric ID, repository `flightinsight-ai` + its numeric ID,
+   entity **Environment** = `core`, name `github-core`.
+   IDs: open `https://api.github.com/orgs/flightinsight-team3` and
+   `https://api.github.com/repos/flightinsight-team3/flightinsight-ai` and take the top-level `"id"`.
+   The subject becomes `repo:flightinsight-team3@<orgId>/flightinsight-ai@<repoId>:environment:core`
+   (GitHub's immutable subject format for repositories created after July 15, 2026).
+5. **IDs.** Identity → *Overview* → *JSON View*: `clientId` and `tenantId`. Students can't open the Entra ID page.
 
 ## Part B — in GitHub (repository admin)
 
-Repository → *Settings* → *Environments* → New environment, for each of `core`, `nosql`, `graph`.
-In each environment add **variables** (not secrets — these IDs are not sensitive):
+Repository → *Settings* → *Environments* → `core`.
 
 | Variable | Value |
 |---|---|
-| `AZURE_CLIENT_ID` | Client ID of that environment's managed identity |
-| `AZURE_TENANT_ID` | Tenant ID |
-| `AZURE_SUBSCRIPTION_ID` | Subscription ID of that owner |
-| `AZURE_RESOURCE_GROUP` | `rg-flightinsight-core` / `-nosql` / `-graph` |
+| `AZURE_CLIENT_ID` | `clientId` of `id-github-core` |
+| `AZURE_TENANT_ID` | `tenantId` (Northeastern tenant) |
+| `AZURE_SUBSCRIPTION_ID` | `8d99dfdf-a6d2-4bd6-b2b6-5f4d059d1b47` |
+| `AZURE_RESOURCE_GROUP` | `rg-flightinsight-core` |
+| `SQL_SERVER_NAME` | `sql-fi-ca-wbl5sr` (after the first deployment) |
+| `FUNCTION_APP_NAME` | `func-fi-wbl5sr` (after the first deployment) |
 
-In `core` also add the **secret** `SQL_ADMIN_PASSWORD` (a strong password; nobody needs to remember it,
-it is also stored in Key Vault).
+| Secret | Value |
+|---|---|
+| `SQL_ADMIN_PASSWORD` | Strong password; avoid `;` `'` `"` `{` `}` |
+| `SQL_CONNECTION_STRING_PROD` | `Server=tcp:sql-fi-ca-wbl5sr.database.windows.net,1433;Database=flightinsight;User ID=fiadmin;Password=<password>;Encrypt=True;Connection Timeout=120;` |
+| `SQL_CONNECTION_STRING_DEV` | Same with `Database=flightinsight-dev` |
 
-## Part C — first deployment
+## Part C — deploy
 
 1. Actions → **Deploy infrastructure** → `core`, *apply* unchecked → check the what-if output.
-2. Run again with *apply* checked. The job prints the outputs: `sqlServerName`, `functionAppName`, ….
-3. In the `core` environment add:
-   - variables `SQL_SERVER_NAME`, `FUNCTION_APP_NAME` (from the outputs)
-   - secrets `SQL_CONNECTION_STRING_PROD` and `SQL_CONNECTION_STRING_DEV`:
-     `Server=tcp:<sqlServerFqdn>,1433;Database=flightinsight;User ID=fiadmin;Password=<password>;Encrypt=True;Connection Timeout=120;`
-     (use `Database=flightinsight-dev` for the dev one)
-4. Repeat steps 1–2 for `nosql` and `graph` (their owners can run them).
-5. Actions → **Deploy SQL schema** → `dev`, then merge anything under `sql/` (or run with `prod`).
-6. Actions → **Deploy Functions** → Run workflow.
-7. Store the Cosmos endpoints and keys in the core Key Vault (`cosmos-nosql-key`, `cosmos-graph-key`, …)
-   so ADF and Functions can use them. The core owner grants themselves **Key Vault Secrets Officer** on the vault to do this.
+2. Run again with *apply* checked.
+3. Add the post-deployment variables and secrets above.
+4. Actions → **Deploy SQL schema** → `dev`; then `prod` (or merge a change under `sql/`).
+5. Actions → **Deploy Functions** → Run workflow.
+
+Key Vault holds every connection secret the code needs: `sql-odbc-flightinsight`, `sql-odbc-flightinsight-dev`,
+`cosmos-nosql-key` (laptop scripts only), `cosmos-graph-key` (Gremlin has key auth only).
 
 ## Troubleshooting
 
 | Error | Cause / fix |
 |---|---|
-| `AADSTS70021: No matching federated identity record found` | Environment name, org or repo in the federated credential doesn't match exactly |
-| `AuthorizationFailed ... roleAssignments/write` | core identity is missing *Role Based Access Control Administrator* |
-| SQL: `Provisioning is restricted in this region` | Uncomment `sqlLocation = 'eastus2'` in `infra/params/core.bicepparam` |
-| Cosmos: free tier already used | Another Cosmos account in that subscription has the free tier; delete it or set `enableFreeTier = false` |
+| `MissingSubscriptionRegistration` | Register the provider named in the error (Part A, step 1) |
+| `AADSTS70021: No matching federated identity record found` | Subject mismatch; the error shows the subject GitHub sent — add a credential that matches it |
+| `AuthorizationFailed ... roleAssignments/write` | `id-github-core` is missing *Role Based Access Control Administrator* |
+| `RequestDisallowedByPolicy` | Region not in the allowed list above |
+| SQL: `Provisioning is restricted in this region` | Change `sqlLocation` in `infra/params/core.bicepparam` to another allowed region |
+| `InvalidResourceLocation ... already exists in location` | A failed resource is left in the old region; delete it (or rename it in `core.bicep`) and redeploy |
+| Cosmos: region has no capacity | Change `cosmosLocation` in `infra/params/core.bicepparam` |
 | SQL deploy times out on first connection | The serverless DB was paused and is resuming; re-run the job |
-| Environments missing in repo settings | Environments need a public repo (or a paid plan for private repos) |
+| Cloud Shell `AuthorizationFailed` on another subscription ID | Run `az account set --subscription 8d99dfdf-a6d2-4bd6-b2b6-5f4d059d1b47` |
