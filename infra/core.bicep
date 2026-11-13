@@ -32,7 +32,7 @@ var suffix = take(uniqueString(resourceGroup().id), 6)
 var names = {
   lake: 'st${prefix}lake${suffix}'
   funcStorage: 'st${prefix}func${suffix}'
-  sqlServer: 'sql-${prefix}-${suffix}'
+  sqlServer: 'sql-${prefix}-ca-${suffix}'
   keyVault: 'kv-${prefix}-${suffix}'
   dataFactory: 'adf-${prefix}-${suffix}'
   plan: 'plan-${prefix}-${suffix}'
