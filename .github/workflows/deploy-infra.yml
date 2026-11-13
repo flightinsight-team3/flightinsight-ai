@@ -1,0 +1,50 @@
+name: Deploy infrastructure
+
+# Manual only: Actions → Deploy infrastructure → Run workflow → choose a component.
+# Each component deploys into a different student subscription (see docs/azure-cicd-setup.md).
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: Component to deploy
+        type: choice
+        options: [core, nosql, graph]
+      apply:
+        description: Apply changes (unchecked = preview only)
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-infra-${{ inputs.component }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.component }}
+    env:
+      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+      PARAMS: infra/params/${{ inputs.component }}.bicepparam
+      SQL_ADMIN_PASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Preview changes (what-if)
+        run: az deployment group what-if -g "$RG" -p "$PARAMS"
+
+      - name: Deploy
+        if: ${{ inputs.apply }}
+        run: |
+          az deployment group create -g "$RG" -p "$PARAMS" \
+            -n "${{ inputs.component }}-${{ github.run_number }}" \
+            --query properties.outputs -o json
