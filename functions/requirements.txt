@@ -5,7 +5,10 @@ azure-storage-file-datalake
 azure-keyvault-secrets
 azure-cosmos
 gremlinpython
-pandas
+pandas>=2.2
 pyarrow
 pyodbc
 requests
+# IATA airport code → IANA time zone, used for UTC conversion
+airportsdata
+numpy
