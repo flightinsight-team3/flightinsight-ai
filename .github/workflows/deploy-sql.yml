@@ -41,6 +41,12 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      # ubuntu-latest no longer ships SqlPackage; install it as a .NET tool.
+      - name: Install SqlPackage
+        run: |
+          dotnet tool install --global microsoft.sqlpackage
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
       - name: Azure login (OIDC)
         uses: azure/login@v2
         with:

@@ -4,8 +4,8 @@ ADF sends a JSON body such as {"month_key": 202401, "run_id": "<ADF run id>"} an
 JSON response in its run history. A non-2xx response makes the ADF activity fail (and retry).
 
 Keep each step short: the ADF Azure Function activity times out after about 230 seconds.
-That is why each source is split into `ingest` (download -> clean -> Data Lake) and `load`
-(Data Lake -> SQL staging). If a step still runs too long, convert it to a Durable Function.
+Functions only download, clean and write parquet to the Data Lake. Loading parquet into SQL
+staging is an ADF Copy activity, which is faster and has no such limit.
 """
 
 import json
@@ -52,11 +52,6 @@ def _year(body: dict) -> int:
 @app.route(route="bts/ingest", methods=["POST"])
 def bts_ingest(req: func.HttpRequest) -> func.HttpResponse:
     return _run("bts_ingest", bts.ingest_month, req, _month)
-
-
-@app.route(route="bts/load", methods=["POST"])
-def bts_load(req: func.HttpRequest) -> func.HttpResponse:
-    return _run("bts_load", bts.load_month, req, _month)
 
 
 @app.route(route="noaa/ingest", methods=["POST"])
