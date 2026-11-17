@@ -14,13 +14,14 @@ import argparse
 import json
 from pathlib import Path
 
-from etl import bts
+from etl import airports, bts
 from etl.common import parse_month_key
 from etl.storage import LakeSink, LocalSink
 
 # source name → ingest_month(month_key, sink=..., raw=...). Add new sources here.
 SOURCES = {
     "bts": bts.ingest_month,
+    "airports": airports.ingest_month,
 }
 
 

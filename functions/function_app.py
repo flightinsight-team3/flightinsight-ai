@@ -13,7 +13,7 @@ import logging
 
 import azure.functions as func
 
-from etl import bts, graph, noaa
+from etl import airports, bts, graph, noaa
 from etl.common import parse_month_key, parse_year
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
@@ -52,6 +52,11 @@ def _year(body: dict) -> int:
 @app.route(route="bts/ingest", methods=["POST"])
 def bts_ingest(req: func.HttpRequest) -> func.HttpResponse:
     return _run("bts_ingest", bts.ingest_month, req, _month)
+
+
+@app.route(route="airports/ingest", methods=["POST"])
+def airports_ingest(req: func.HttpRequest) -> func.HttpResponse:
+    return _run("airports_ingest", airports.ingest_month, req, _month)
 
 
 @app.route(route="noaa/ingest", methods=["POST"])
