@@ -168,6 +168,15 @@ resource sqlOdbcSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = [
   }
 ]
 
+// Plain SQL admin password for ADF's Azure SQL linked service (ADF builds its own connection).
+resource sqlPasswordSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: kv
+  name: 'sql-admin-password'
+  properties: {
+    value: sqlAdminPassword
+  }
+}
+
 // ---------------------------------------------------------------- Data Factory
 // Git integration (repo → adf/ folder) is configured once in ADF Studio, not here,
 // so redeploying this template never overwrites it.
@@ -298,6 +307,16 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
     }
   }
   dependsOn: [cosmosGraph]
+}
+
+
+// Function App host key for ADF's Azure Function linked service.
+resource functionKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: kv
+  name: 'func-host-key'
+  properties: {
+    value: listKeys('${functionApp.id}/host/default', '2024-04-01').functionKeys.default
+  }
 }
 
 // ---------------------------------------------------------------- Service permissions
