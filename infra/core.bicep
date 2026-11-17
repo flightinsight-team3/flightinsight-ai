@@ -178,14 +178,24 @@ resource sqlPasswordSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
 }
 
 // ---------------------------------------------------------------- Data Factory
-// Git integration (repo → adf/ folder) is configured once in ADF Studio, not here,
-// so redeploying this template never overwrites it.
+// Git integration lives here so redeploying never disconnects ADF from the repo.
+// The publish branch (adf_publish) is stored in adf/publish_config.json, not here.
 resource adf 'Microsoft.DataFactory/factories@2018-06-01' = {
   name: names.dataFactory
   location: location
   tags: tags
   identity: { type: 'SystemAssigned' }
-  properties: {}
+  properties: {
+    repoConfiguration: {
+      type: 'FactoryGitHubConfiguration'
+      hostName: 'https://github.com'
+      accountName: 'flightinsight-team3'
+      repositoryName: 'flightinsight-ai'
+      collaborationBranch: 'main'
+      rootFolder: '/adf'
+      disablePublish: false
+    }
+  }
 }
 
 // ---------------------------------------------------------------- Cosmos DB
