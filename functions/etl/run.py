@@ -14,7 +14,7 @@ import argparse
 import json
 from pathlib import Path
 
-from etl import airports, bts, noaa
+from etl import airports, bts
 from etl.common import parse_month_key
 from etl.storage import LakeSink, LocalSink
 
@@ -22,7 +22,6 @@ from etl.storage import LakeSink, LocalSink
 SOURCES = {
     "bts": bts.ingest_month,
     "airports": airports.ingest_month,
-    "noaa": noaa.ingest_month,
 }
 
 
