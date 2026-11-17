@@ -173,8 +173,6 @@ def test_empty_optional_fields_become_none():
 
 
 def test_read_raw_handles_real_file_layout():
-    import io
-
     header = ",".join(airports.RAW_COLUMNS) + "\n"
     values = ",".join(row()[c] for c in airports.RAW_COLUMNS) + "\n"
     raw = airports.read_raw((header + values).encode("utf-8"))

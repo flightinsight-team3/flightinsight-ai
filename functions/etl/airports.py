@@ -91,59 +91,64 @@ STG_GEOGRAPHY_COLUMNS = [
 ]
 
 # 50 states + DC. FIPS from Census; census_region from the U.S. Census Bureau's four regions.
-US_STATES: tuple[dict[str, str], ...] = (
-    {"state_code": "AL", "state_name": "Alabama",              "state_fips": "01", "census_region": "South"},
-    {"state_code": "AK", "state_name": "Alaska",               "state_fips": "02", "census_region": "West"},
-    {"state_code": "AZ", "state_name": "Arizona",              "state_fips": "04", "census_region": "West"},
-    {"state_code": "AR", "state_name": "Arkansas",             "state_fips": "05", "census_region": "South"},
-    {"state_code": "CA", "state_name": "California",           "state_fips": "06", "census_region": "West"},
-    {"state_code": "CO", "state_name": "Colorado",             "state_fips": "08", "census_region": "West"},
-    {"state_code": "CT", "state_name": "Connecticut",          "state_fips": "09", "census_region": "Northeast"},
-    {"state_code": "DE", "state_name": "Delaware",             "state_fips": "10", "census_region": "South"},
-    {"state_code": "DC", "state_name": "District of Columbia", "state_fips": "11", "census_region": "South"},
-    {"state_code": "FL", "state_name": "Florida",              "state_fips": "12", "census_region": "South"},
-    {"state_code": "GA", "state_name": "Georgia",              "state_fips": "13", "census_region": "South"},
-    {"state_code": "HI", "state_name": "Hawaii",               "state_fips": "15", "census_region": "West"},
-    {"state_code": "ID", "state_name": "Idaho",                "state_fips": "16", "census_region": "West"},
-    {"state_code": "IL", "state_name": "Illinois",             "state_fips": "17", "census_region": "Midwest"},
-    {"state_code": "IN", "state_name": "Indiana",              "state_fips": "18", "census_region": "Midwest"},
-    {"state_code": "IA", "state_name": "Iowa",                 "state_fips": "19", "census_region": "Midwest"},
-    {"state_code": "KS", "state_name": "Kansas",               "state_fips": "20", "census_region": "Midwest"},
-    {"state_code": "KY", "state_name": "Kentucky",             "state_fips": "21", "census_region": "South"},
-    {"state_code": "LA", "state_name": "Louisiana",            "state_fips": "22", "census_region": "South"},
-    {"state_code": "ME", "state_name": "Maine",                "state_fips": "23", "census_region": "Northeast"},
-    {"state_code": "MD", "state_name": "Maryland",             "state_fips": "24", "census_region": "South"},
-    {"state_code": "MA", "state_name": "Massachusetts",        "state_fips": "25", "census_region": "Northeast"},
-    {"state_code": "MI", "state_name": "Michigan",             "state_fips": "26", "census_region": "Midwest"},
-    {"state_code": "MN", "state_name": "Minnesota",            "state_fips": "27", "census_region": "Midwest"},
-    {"state_code": "MS", "state_name": "Mississippi",          "state_fips": "28", "census_region": "South"},
-    {"state_code": "MO", "state_name": "Missouri",             "state_fips": "29", "census_region": "Midwest"},
-    {"state_code": "MT", "state_name": "Montana",              "state_fips": "30", "census_region": "West"},
-    {"state_code": "NE", "state_name": "Nebraska",             "state_fips": "31", "census_region": "Midwest"},
-    {"state_code": "NV", "state_name": "Nevada",               "state_fips": "32", "census_region": "West"},
-    {"state_code": "NH", "state_name": "New Hampshire",        "state_fips": "33", "census_region": "Northeast"},
-    {"state_code": "NJ", "state_name": "New Jersey",           "state_fips": "34", "census_region": "Northeast"},
-    {"state_code": "NM", "state_name": "New Mexico",           "state_fips": "35", "census_region": "West"},
-    {"state_code": "NY", "state_name": "New York",             "state_fips": "36", "census_region": "Northeast"},
-    {"state_code": "NC", "state_name": "North Carolina",       "state_fips": "37", "census_region": "South"},
-    {"state_code": "ND", "state_name": "North Dakota",         "state_fips": "38", "census_region": "Midwest"},
-    {"state_code": "OH", "state_name": "Ohio",                 "state_fips": "39", "census_region": "Midwest"},
-    {"state_code": "OK", "state_name": "Oklahoma",             "state_fips": "40", "census_region": "South"},
-    {"state_code": "OR", "state_name": "Oregon",               "state_fips": "41", "census_region": "West"},
-    {"state_code": "PA", "state_name": "Pennsylvania",         "state_fips": "42", "census_region": "Northeast"},
-    {"state_code": "RI", "state_name": "Rhode Island",         "state_fips": "44", "census_region": "Northeast"},
-    {"state_code": "SC", "state_name": "South Carolina",       "state_fips": "45", "census_region": "South"},
-    {"state_code": "SD", "state_name": "South Dakota",         "state_fips": "46", "census_region": "Midwest"},
-    {"state_code": "TN", "state_name": "Tennessee",            "state_fips": "47", "census_region": "South"},
-    {"state_code": "TX", "state_name": "Texas",                "state_fips": "48", "census_region": "South"},
-    {"state_code": "UT", "state_name": "Utah",                 "state_fips": "49", "census_region": "West"},
-    {"state_code": "VT", "state_name": "Vermont",              "state_fips": "50", "census_region": "Northeast"},
-    {"state_code": "VA", "state_name": "Virginia",             "state_fips": "51", "census_region": "South"},
-    {"state_code": "WA", "state_name": "Washington",           "state_fips": "53", "census_region": "West"},
-    {"state_code": "WV", "state_name": "West Virginia",        "state_fips": "54", "census_region": "South"},
-    {"state_code": "WI", "state_name": "Wisconsin",            "state_fips": "55", "census_region": "Midwest"},
-    {"state_code": "WY", "state_name": "Wyoming",              "state_fips": "56", "census_region": "West"},
-)  # fmt: skip
+_STATES_RAW: tuple[tuple[str, str, str, str], ...] = (
+    ("AL", "Alabama", "01", "South"),
+    ("AK", "Alaska", "02", "West"),
+    ("AZ", "Arizona", "04", "West"),
+    ("AR", "Arkansas", "05", "South"),
+    ("CA", "California", "06", "West"),
+    ("CO", "Colorado", "08", "West"),
+    ("CT", "Connecticut", "09", "Northeast"),
+    ("DE", "Delaware", "10", "South"),
+    ("DC", "District of Columbia", "11", "South"),
+    ("FL", "Florida", "12", "South"),
+    ("GA", "Georgia", "13", "South"),
+    ("HI", "Hawaii", "15", "West"),
+    ("ID", "Idaho", "16", "West"),
+    ("IL", "Illinois", "17", "Midwest"),
+    ("IN", "Indiana", "18", "Midwest"),
+    ("IA", "Iowa", "19", "Midwest"),
+    ("KS", "Kansas", "20", "Midwest"),
+    ("KY", "Kentucky", "21", "South"),
+    ("LA", "Louisiana", "22", "South"),
+    ("ME", "Maine", "23", "Northeast"),
+    ("MD", "Maryland", "24", "South"),
+    ("MA", "Massachusetts", "25", "Northeast"),
+    ("MI", "Michigan", "26", "Midwest"),
+    ("MN", "Minnesota", "27", "Midwest"),
+    ("MS", "Mississippi", "28", "South"),
+    ("MO", "Missouri", "29", "Midwest"),
+    ("MT", "Montana", "30", "West"),
+    ("NE", "Nebraska", "31", "Midwest"),
+    ("NV", "Nevada", "32", "West"),
+    ("NH", "New Hampshire", "33", "Northeast"),
+    ("NJ", "New Jersey", "34", "Northeast"),
+    ("NM", "New Mexico", "35", "West"),
+    ("NY", "New York", "36", "Northeast"),
+    ("NC", "North Carolina", "37", "South"),
+    ("ND", "North Dakota", "38", "Midwest"),
+    ("OH", "Ohio", "39", "Midwest"),
+    ("OK", "Oklahoma", "40", "South"),
+    ("OR", "Oregon", "41", "West"),
+    ("PA", "Pennsylvania", "42", "Northeast"),
+    ("RI", "Rhode Island", "44", "Northeast"),
+    ("SC", "South Carolina", "45", "South"),
+    ("SD", "South Dakota", "46", "Midwest"),
+    ("TN", "Tennessee", "47", "South"),
+    ("TX", "Texas", "48", "South"),
+    ("UT", "Utah", "49", "West"),
+    ("VT", "Vermont", "50", "Northeast"),
+    ("VA", "Virginia", "51", "South"),
+    ("WA", "Washington", "53", "West"),
+    ("WV", "West Virginia", "54", "South"),
+    ("WI", "Wisconsin", "55", "Midwest"),
+    ("WY", "Wyoming", "56", "West"),
+)
+
+US_STATES: tuple[dict[str, str], ...] = tuple(
+    {"state_code": code, "state_name": name, "state_fips": fips, "census_region": region}
+    for code, name, fips, region in _STATES_RAW
+)
 
 
 def raw_path(month_key: int) -> str:
@@ -248,7 +253,7 @@ def _build_airports(
     df: pd.DataFrame, month_key: int, airport_tz: Mapping[str, str]
 ) -> pd.DataFrame:
     iata = df["iata_code"].str.upper()
-    # Some small airports leave icao_code empty; fall back to ident (which holds ICAO for US airports).
+    # Some small airports leave icao_code empty; fall back to ident (holds ICAO for US airports).
     icao = df["icao_code"].where(df["icao_code"] != "", df["ident"])
     icao = icao.where(icao.str.fullmatch(r"[A-Z0-9]{4}").fillna(False), None)
 
