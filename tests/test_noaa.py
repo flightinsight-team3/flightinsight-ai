@@ -121,30 +121,34 @@ def test_invalid_rows_are_rejected_with_a_reason():
         hourly_row(STATION=""),                          # missing STATION
         hourly_row(STATION="99999999999"),               # unknown STATION
         hourly_row(DATE=""),                             # bad DATE
-        hourly_row(REPORT_TYPE="FM-5"),                  # unsupported REPORT_TYPE
-        hourly_row(DATE="2024-02-01T08:00:00"),          # DATE outside month
     )
     assert len(result.hourly) == 0
     assert sorted(result.rejected["reason"]) == sorted(
-        [
-            "missing STATION",
-            "unknown STATION",
-            "bad DATE",
-            "unsupported REPORT_TYPE",
-            "DATE outside month",
-        ]
+        ["missing STATION", "unknown STATION", "bad DATE"]
     )
     assert set(result.rejected.columns) == {"source", "month_key", "reason", "raw_record"}
 
 
-def test_duplicate_station_hour_keeps_the_first():
+def test_other_months_and_report_types_are_out_of_scope_not_rejected():
+    result = run(
+        hourly_row(),
+        hourly_row(DATE="2024-02-01T08:00:00"),          # other month of the yearly file
+        hourly_row(REPORT_TYPE="SOM"),                   # monthly summary
+    )
+    assert len(result.hourly) == 1
+    assert len(result.rejected) == 0
+    assert result.stats["rows_out_of_scope"] == 2
+
+
+def test_extra_observations_in_the_same_hour_keep_the_first():
     result = run(
         hourly_row(DATE="2024-01-08T08:51:00", HourlyDryBulbTemperature="35"),
         hourly_row(DATE="2024-01-08T08:56:00", HourlyDryBulbTemperature="36", REPORT_TYPE="FM-16"),
     )
     assert len(result.hourly) == 1
     assert result.hourly.iloc[0]["temperature_f"] == 35.0
-    assert list(result.rejected["reason"]) == ["duplicate station-hour"]
+    assert len(result.rejected) == 0
+    assert result.stats["rows_extra_obs"] == 1
 
 
 def test_duplicate_station_date_keeps_the_first():
