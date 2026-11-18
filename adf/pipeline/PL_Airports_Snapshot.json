@@ -1,0 +1,280 @@
+{
+	"name": "PL_Airports_Snapshot",
+	"properties": {
+		"activities": [
+			{
+				"name": "Airports_Ingest",
+				"type": "AzureFunctionActivity",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 2,
+					"retryIntervalInSeconds": 60,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"functionName": "airports/ingest",
+					"body": "{\"month_key\": @{pipeline().parameters.month_key}, \"run_id\": \"@{pipeline().RunId}\"}",
+					"method": "POST"
+				},
+				"linkedServiceName": {
+					"referenceName": "LS_FunctionApp",
+					"type": "LinkedServiceReference"
+				}
+			},
+			{
+				"name": "Copy_Airports",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "Airports_Ingest",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 2,
+					"retryIntervalInSeconds": 60,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "ParquetSource",
+						"storeSettings": {
+							"type": "AzureBlobFSReadSettings",
+							"recursive": true,
+							"enablePartitionDiscovery": false
+						},
+						"formatSettings": {
+							"type": "ParquetReadSettings"
+						}
+					},
+					"sink": {
+						"type": "AzureSqlSink",
+						"preCopyScript": {
+							"value": "@concat('DELETE FROM dbo.stg_airports WHERE snapshot_key = ', string(pipeline().parameters.month_key))",
+							"type": "Expression"
+						},
+						"writeBehavior": "insert",
+						"sqlWriterUseTableLock": false,
+						"disableMetricsCollection": false
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "DS_Lake_Parquet",
+						"type": "DatasetReference",
+						"parameters": {
+							"container": "clean",
+							"folder": {
+								"value": "@concat('airports/', string(pipeline().parameters.month_key))",
+								"type": "Expression"
+							},
+							"file": "airports.parquet"
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "DS_Sql_Table",
+						"type": "DatasetReference",
+						"parameters": {
+							"database_name": {
+								"value": "@pipeline().parameters.database_name",
+								"type": "Expression"
+							},
+							"schema": "dbo",
+							"table": "stg_airports"
+						}
+					}
+				]
+			},
+			{
+				"name": "Copy_Geography",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "Airports_Ingest",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 2,
+					"retryIntervalInSeconds": 60,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "ParquetSource",
+						"storeSettings": {
+							"type": "AzureBlobFSReadSettings",
+							"recursive": true,
+							"enablePartitionDiscovery": false
+						},
+						"formatSettings": {
+							"type": "ParquetReadSettings"
+						}
+					},
+					"sink": {
+						"type": "AzureSqlSink",
+						"preCopyScript": {
+							"value": "@concat('DELETE FROM dbo.stg_geography WHERE snapshot_key = ', string(pipeline().parameters.month_key))",
+							"type": "Expression"
+						},
+						"writeBehavior": "insert",
+						"sqlWriterUseTableLock": false,
+						"disableMetricsCollection": false
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "DS_Lake_Parquet",
+						"type": "DatasetReference",
+						"parameters": {
+							"container": "clean",
+							"folder": {
+								"value": "@concat('airports/', string(pipeline().parameters.month_key))",
+								"type": "Expression"
+							},
+							"file": "geography.parquet"
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "DS_Sql_Table",
+						"type": "DatasetReference",
+						"parameters": {
+							"database_name": {
+								"value": "@pipeline().parameters.database_name",
+								"type": "Expression"
+							},
+							"schema": "dbo",
+							"table": "stg_geography"
+						}
+					}
+				]
+			},
+			{
+				"name": "Copy_Rejected",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "Airports_Ingest",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 2,
+					"retryIntervalInSeconds": 60,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "ParquetSource",
+						"storeSettings": {
+							"type": "AzureBlobFSReadSettings",
+							"recursive": true,
+							"enablePartitionDiscovery": false
+						},
+						"formatSettings": {
+							"type": "ParquetReadSettings"
+						}
+					},
+					"sink": {
+						"type": "AzureSqlSink",
+						"preCopyScript": {
+							"value": "@concat('DELETE FROM dbo.stg_rejected WHERE source = ''airports'' AND month_key = ', string(pipeline().parameters.month_key))",
+							"type": "Expression"
+						},
+						"writeBehavior": "insert",
+						"sqlWriterUseTableLock": false,
+						"disableMetricsCollection": false
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "DS_Lake_Parquet",
+						"type": "DatasetReference",
+						"parameters": {
+							"container": "clean",
+							"folder": {
+								"value": "@concat('airports/', string(pipeline().parameters.month_key))",
+								"type": "Expression"
+							},
+							"file": "rejected.parquet"
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "DS_Sql_Table",
+						"type": "DatasetReference",
+						"parameters": {
+							"database_name": {
+								"value": "@pipeline().parameters.database_name",
+								"type": "Expression"
+							},
+							"schema": "dbo",
+							"table": "stg_rejected"
+						}
+					}
+				]
+			}
+		],
+		"parameters": {
+			"month_key": {
+				"type": "string",
+				"defaultValue": "202611"
+			},
+			"database_name": {
+				"type": "string",
+				"defaultValue": "flightinsight-dev"
+			}
+		},
+		"annotations": []
+	}
+}
