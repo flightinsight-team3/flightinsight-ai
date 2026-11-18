@@ -58,8 +58,9 @@ BEGIN
                CASE WHEN w.day_of_week IN (6, 7) THEN 1 ELSE 0 END AS is_weekend,
                CASE WHEN h.d IS NULL THEN 0 ELSE 1 END AS is_holiday,
                h.name AS holiday_name,
-               (SELECT MIN(ABS(DATEDIFF(DAY, days.d, h2.d))) FROM holidays AS h2)
-                   AS days_to_nearest_holiday,
+               (SELECT TOP (1) ABS(DATEDIFF(DAY, days.d, h2.d))
+                FROM holidays AS h2
+                ORDER BY ABS(DATEDIFF(DAY, days.d, h2.d))) AS days_to_nearest_holiday,
                CASE
                    WHEN MONTH(days.d) IN (12, 1, 2) THEN 'Winter'
                    WHEN MONTH(days.d) IN (3, 4, 5) THEN 'Spring'
