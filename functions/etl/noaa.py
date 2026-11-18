@@ -45,10 +45,10 @@ URL_TEMPLATE = (
 # The 30 top US airports and their NOAA LCD stations. Each tuple is
 # (iata, station_id, icao, station_name, latitude, longitude, std_offset_hours).
 # std_offset is the *standard* UTC offset (no DST) because LCD reports LST, not local time.
-# NOTE: station_ids follow the USAF+WBAN 11-char format used by NCEI LCD. Verify in production.
+# station_id = USAF+WBAN as used in NCEI LCD URLs (checked against isd-history.csv).
 _STATIONS_RAW: tuple[tuple[str, str, str, str, float, float, int], ...] = (
     ("ATL", "72219013874", "KATL", "ATLANTA HARTSFIELD INTL AP",            33.6301, -84.4419, -5),
-    ("AUS", "72254013958", "KAUS", "AUSTIN BERGSTROM INTL AP",              30.1831, -97.6799, -6),
+    ("AUS", "72254013904", "KAUS", "AUSTIN BERGSTROM INTL AP",              30.1831, -97.6799, -6),
     ("BNA", "72327013897", "KBNA", "NASHVILLE INTL AP",                     36.1245, -86.6782, -6),
     ("BOS", "72509014739", "KBOS", "BOSTON LOGAN INTL AP",                  42.3606, -71.0106, -5),
     ("BWI", "72406093721", "KBWI", "BALTIMORE WASHINGTON INTL AP",          39.1733, -76.6839, -5),
@@ -58,7 +58,7 @@ _STATIONS_RAW: tuple[tuple[str, str, str, str, float, float, int], ...] = (
     ("DFW", "72259003927", "KDFW", "DALLAS FORT WORTH INTL AP",             32.8968, -97.0380, -6),
     ("DTW", "72537094847", "KDTW", "DETROIT METRO WAYNE CO AP",             42.2124, -83.3534, -5),
     ("EWR", "72502014734", "KEWR", "NEWARK LIBERTY INTL AP",                40.6895, -74.1745, -5),
-    ("FLL", "72206812849", "KFLL", "FORT LAUDERDALE HOLLYWOOD INTL AP",     26.0725, -80.1528, -5),
+    ("FLL", "74783012849", "KFLL", "FORT LAUDERDALE HOLLYWOOD INTL AP",     26.0725, -80.1528, -5),
     ("IAD", "72403093738", "KIAD", "WASHINGTON DULLES INTL AP",             38.9445, -77.4558, -5),
     ("IAH", "72243012960", "KIAH", "HOUSTON INTERCONTINENTAL AP",           29.9902, -95.3368, -6),
     ("JFK", "74486094789", "KJFK", "NEW YORK J F KENNEDY INTL AP",          40.6397, -73.7789, -5),
@@ -227,24 +227,7 @@ def validate(df: pd.DataFrame, month_key: int) -> pd.Series:
     flag(df["STATION"] == "", "missing STATION")
     flag(~df["STATION"].isin(STATION_BY_ID), "unknown STATION")
 
-    parsed_date = pd.to_datetime(df["DATE"], errors="coerce")
-    flag(parsed_date.isna(), "bad DATE")
-
-    # Not an hourly METAR, not a daily SOD -> drop (we count as rejected to keep audit trail).
-    row_type = df["REPORT_TYPE"].str.strip()
-    is_hourly = row_type.isin(HOURLY_REPORT_TYPES)
-    is_daily = row_type == DAILY_REPORT_TYPE
-    flag(~(is_hourly | is_daily), "unsupported REPORT_TYPE")
-
-    # Keep only rows whose LOCAL date falls in month_key (converted to station's local date below).
-    station = df["STATION"].map(STATION_BY_ID)
-    offset_hours = station.map(lambda s: s["std_offset_hours"] if isinstance(s, dict) else None)
-    valid_station = offset_hours.notna() & parsed_date.notna()
-    year_month = pd.Series(pd.NaT, index=df.index)
-    year_month.loc[valid_station] = parsed_date.loc[valid_station]
-    local_ym = pd.to_datetime(year_month).dt.year * 100 + pd.to_datetime(year_month).dt.month
-    flag(valid_station & (local_ym != month_key), "DATE outside month")
-
+    flag(pd.to_datetime(df["DATE"], errors="coerce").isna(), "bad DATE")
     return reasons
 
 
@@ -357,19 +340,28 @@ def transform(raws: dict[str, bytes] | pd.DataFrame, month_key: int) -> Transfor
     """Scope, validate and split one month of LCD data into hourly + daily. Pure."""
     df = raws if isinstance(raws, pd.DataFrame) else read_raw(raws)
     df = df[RAW_COLUMNS].apply(lambda column: column.astype(str).str.strip())
+    rows_read = len(df)
+
+    # Each LCD file holds a whole year plus monthly summaries; other months and other report
+    # types are out of scope (counted, not rejected).
+    parsed = pd.to_datetime(df["DATE"], errors="coerce")
+    row_type = df["REPORT_TYPE"]
+    supported = row_type.isin(HOURLY_REPORT_TYPES) | (row_type == DAILY_REPORT_TYPE)
+    in_month = parsed.dt.year * 100 + parsed.dt.month == month_key
+    out_of_scope = parsed.notna() & ~(supported & in_month)
+    df = df[~out_of_scope]
+    row_type = row_type[~out_of_scope]
 
     reasons = validate(df, month_key)
     valid = reasons == ""
-    row_type = df["REPORT_TYPE"].str.strip()
 
     hourly_rows = df[valid & row_type.isin(HOURLY_REPORT_TYPES)]
     daily_rows = df[valid & (row_type == DAILY_REPORT_TYPE)]
 
     hourly = _build_hourly(hourly_rows, month_key)
-    # Keep one observation per station-hour (first wins).
-    duplicate_h = hourly.duplicated(["station_id", "obs_hour_utc"], keep="first")
-    reasons.loc[hourly.index[duplicate_h]] = "duplicate station-hour"
-    hourly = hourly[~duplicate_h].reset_index(drop=True)
+    # Stations report several times an hour (routine + special METARs); keep the first.
+    extra_obs = hourly.duplicated(["station_id", "obs_hour_utc"], keep="first")
+    hourly = hourly[~extra_obs].reset_index(drop=True)
 
     daily = _build_daily(daily_rows, month_key)
     duplicate_d = daily.duplicated(["station_id", "date_key"], keep="first")
@@ -381,7 +373,9 @@ def transform(raws: dict[str, bytes] | pd.DataFrame, month_key: int) -> Transfor
     stations = _build_stations(month_key)
 
     stats = {
-        "rows_read": int(len(df)),
+        "rows_read": int(rows_read),
+        "rows_out_of_scope": int(out_of_scope.sum()),
+        "rows_extra_obs": int(extra_obs.sum()),
         "rows_hourly": int(len(hourly)),
         "rows_daily": int(len(daily)),
         "rows_rejected": int(len(rejected)),
