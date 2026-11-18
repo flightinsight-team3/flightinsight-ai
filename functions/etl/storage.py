@@ -49,6 +49,11 @@ class LakeSink:
 
 
 def to_parquet_bytes(df: pd.DataFrame) -> bytes:
+    """Serialize to parquet that Azure Data Factory can read.
+
+    pandas stores datetimes in nanoseconds, which ADF's parquet reader does not support
+    (it reads them as plain Int64). Write millisecond timestamps instead.
+    """
     buffer = io.BytesIO()
-    df.to_parquet(buffer, index=False)
+    df.to_parquet(buffer, index=False, coerce_timestamps="ms", allow_truncated_timestamps=True)
     return buffer.getvalue()
