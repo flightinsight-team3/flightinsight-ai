@@ -1,0 +1,197 @@
+{
+	"name": "PL_BTS_Month",
+	"properties": {
+		"activities": [
+			{
+				"name": "BTS_Ingest",
+				"type": "AzureFunctionActivity",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 2,
+					"retryIntervalInSeconds": 60,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"functionName": "bts/ingest",
+					"body": "{\"month_key\": @{pipeline().parameters.month_key}, \"run_id\": \"@{pipeline().RunId}\"}",
+					"method": "POST"
+				},
+				"linkedServiceName": {
+					"referenceName": "LS_FunctionApp",
+					"type": "LinkedServiceReference"
+				}
+			},
+			{
+				"name": "Copy_Flights",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "BTS_Ingest",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 2,
+					"retryIntervalInSeconds": 60,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "ParquetSource",
+						"storeSettings": {
+							"type": "AzureBlobFSReadSettings",
+							"recursive": true,
+							"enablePartitionDiscovery": false
+						},
+						"formatSettings": {
+							"type": "ParquetReadSettings"
+						}
+					},
+					"sink": {
+						"type": "AzureSqlSink",
+						"preCopyScript": "@concat('DELETE FROM dbo.stg_flights WHERE month_key = ', string(pipeline().parameters.month_key))",
+						"writeBehavior": "insert",
+						"sqlWriterUseTableLock": false,
+						"disableMetricsCollection": false
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "DS_Lake_Parquet",
+						"type": "DatasetReference",
+						"parameters": {
+							"container": "clean",
+							"folder": {
+								"value": "@concat('bts/', string(pipeline().parameters.month_key))",
+								"type": "Expression"
+							},
+							"file": "flights.parquet"
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "DS_Sql_Table",
+						"type": "DatasetReference",
+						"parameters": {
+							"database_name": {
+								"value": "@pipeline().parameters.database_name",
+								"type": "Expression"
+							},
+							"schema": "dbo",
+							"table": "stg_flights"
+						}
+					}
+				]
+			},
+			{
+				"name": "Copy_Rejected",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "BTS_Ingest",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 2,
+					"retryIntervalInSeconds": 60,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "ParquetSource",
+						"storeSettings": {
+							"type": "AzureBlobFSReadSettings",
+							"recursive": true,
+							"enablePartitionDiscovery": false
+						},
+						"formatSettings": {
+							"type": "ParquetReadSettings"
+						}
+					},
+					"sink": {
+						"type": "AzureSqlSink",
+						"preCopyScript": {
+							"value": "@concat('DELETE FROM dbo.stg_rejected WHERE source = ''bts'' AND month_key = ', string(pipeline().parameters.month_key))",
+							"type": "Expression"
+						},
+						"writeBehavior": "insert",
+						"sqlWriterUseTableLock": false,
+						"disableMetricsCollection": false
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "DS_Lake_Parquet",
+						"type": "DatasetReference",
+						"parameters": {
+							"container": "clean",
+							"folder": {
+								"value": "@concat('bts/', string(pipeline().parameters.month_key))",
+								"type": "Expression"
+							},
+							"file": "rejected.parquet"
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "DS_Sql_Table",
+						"type": "DatasetReference",
+						"parameters": {
+							"database_name": {
+								"value": "@pipeline().parameters.database_name",
+								"type": "Expression"
+							},
+							"schema": "dbo",
+							"table": "stg_rejected"
+						}
+					}
+				]
+			}
+		],
+		"parameters": {
+			"month_key": {
+				"type": "string",
+				"defaultValue": "202401"
+			},
+			"database_name": {
+				"type": "string",
+				"defaultValue": "flightinsight-dev"
+			}
+		},
+		"annotations": []
+	}
+}
