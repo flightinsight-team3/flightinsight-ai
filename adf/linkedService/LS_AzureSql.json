@@ -1,11 +1,17 @@
 {
 	"name": "LS_AzureSql",
 	"properties": {
+		"parameters": {
+			"DatabaseName": {
+				"type": "string",
+				"defaultValue": "flightinsight-dev"
+			}
+		},
 		"annotations": [],
 		"type": "AzureSqlDatabase",
 		"typeProperties": {
 			"server": "sql-fi-ca-wbl5sr.database.windows.net",
-			"database": "flightinsight",
+			"database": "@{linkedService().DatabaseName}",
 			"encrypt": "mandatory",
 			"trustServerCertificate": false,
 			"authenticationType": "SQL",
