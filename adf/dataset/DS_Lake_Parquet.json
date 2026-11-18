@@ -1,5 +1,5 @@
 {
-	"name": "Parquet1",
+	"name": "DS_Lake_Parquet",
 	"properties": {
 		"linkedServiceName": {
 			"referenceName": "LS_DataLake",
