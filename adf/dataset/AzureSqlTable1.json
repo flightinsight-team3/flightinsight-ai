@@ -1,0 +1,32 @@
+{
+	"name": "AzureSqlTable1",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "LS_AzureSql",
+			"type": "LinkedServiceReference",
+			"parameters": {
+				"DatabaseName": "@dataset().database_name"
+			}
+		},
+		"parameters": {
+			"database_name": {
+				"type": "string",
+				"defaultValue": "flightinsight-dev"
+			},
+			"schema": {
+				"type": "string",
+				"defaultValue": "dbo"
+			},
+			"table": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": [],
+		"typeProperties": {
+			"schema": "@dataset().schema",
+			"table": "@dataset().table"
+		}
+	}
+}
