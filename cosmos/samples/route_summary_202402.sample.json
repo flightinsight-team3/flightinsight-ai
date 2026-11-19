@@ -1,0 +1,41 @@
+{
+  "id": "SEA-JFK-202402",
+  "route_key": 412,
+  "origin": "SEA",
+  "dest": "JFK",
+  "month_key": 202402,
+  "distance_mi": 2422,
+  "totals": {
+    "flights": 380,
+    "cancelled": 8,
+    "diverted": 2,
+    "on_time_rate": 0.82,
+    "avg_arr_delay_min": 9.8,
+    "p90_arr_delay_min": 46.0,
+    "weather_delay_share": 0.18
+  },
+  "by_airline": [
+    {
+      "carrier_code": "AS",
+      "flights": 170,
+      "cancelled": 3,
+      "on_time_rate": 0.85,
+      "avg_arr_delay_min": 7.5
+    },
+    {
+      "carrier_code": "DL",
+      "flights": 210,
+      "cancelled": 5,
+      "on_time_rate": 0.80,
+      "avg_arr_delay_min": 11.7
+    }
+  ],
+  "delay_causes_min": {
+    "carrier": 1800,
+    "weather": 700,
+    "nas": 1050,
+    "security": 0,
+    "late_aircraft": 1150
+  },
+  "best_departure_hours": [7, 9, 14]
+}

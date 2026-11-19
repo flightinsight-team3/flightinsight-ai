@@ -289,9 +289,7 @@ def transform(
     df = raw[RAW_COLUMNS].apply(lambda column: column.astype(str).str.strip())
 
     in_scope = (
-        (df["iso_country"] == "US")
-        & (df["iata_code"] != "")
-        & df["type"].isin(AIRPORT_TYPES)
+        (df["iso_country"] == "US") & (df["iata_code"] != "") & df["type"].isin(AIRPORT_TYPES)
     )
     df = df[in_scope]
 
@@ -319,9 +317,7 @@ def transform(
 
 
 # ---------------------------------------------------------------------------- run
-def ingest_month(
-    month_key: int, sink: Sink | None = None, raw: bytes | None = None
-) -> dict:
+def ingest_month(month_key: int, sink: Sink | None = None, raw: bytes | None = None) -> dict:
     """Download (unless raw is given), keep the raw CSV, write airports/geography/rejected parquet.
 
     Re-running a snapshot_key overwrites its files, so it never creates duplicates.

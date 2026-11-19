@@ -275,14 +275,17 @@ def _build_hourly(df: pd.DataFrame, month_key: int) -> pd.DataFrame:
     temperature = _to_numeric(df["HourlyDryBulbTemperature"]).round(1)
 
     precip_raw = df["HourlyPrecipitation"].astype(str).str.strip()
-    is_trace = (precip_raw.str.upper() == "T")
+    is_trace = precip_raw.str.upper() == "T"
     precip = _to_numeric(precip_raw.where(~is_trace, "0")).round(2)
 
     wind_speed = _to_numeric(df["HourlyWindSpeed"]).round().astype("Int64")
     wind_gust = _to_numeric(df["HourlyWindGustSpeed"]).round().astype("Int64")
     visibility = _to_numeric(df["HourlyVisibility"]).round(2)
-    present_weather = df["HourlyPresentWeatherType"].astype(str).str.strip().where(
-        df["HourlyPresentWeatherType"].astype(str).str.strip() != "", None
+    present_weather = (
+        df["HourlyPresentWeatherType"]
+        .astype(str)
+        .str.strip()
+        .where(df["HourlyPresentWeatherType"].astype(str).str.strip() != "", None)
     )
 
     clean = pd.DataFrame(
