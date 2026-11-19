@@ -1,9 +1,11 @@
 # Azure SQL to Cosmos DB NoSQL synchronization.
 import os
+from decimal import Decimal
+
 import pyodbc
 from azure.cosmos import CosmosClient
-from decimal import Decimal
-from etl.transform_routes import group_route_rows, build_route_documents
+
+from etl.transform_routes import build_route_documents, group_route_rows
 
 
 def get_cosmos_container():
@@ -17,6 +19,7 @@ def get_cosmos_container():
     database = client.get_database_client("flightinsight")
 
     return database.get_container_client("route_summaries")
+
 
 def get_sql_connection():
     # Connect to Azure SQL Database.
@@ -33,6 +36,7 @@ def get_sql_connection():
     )
 
     return pyodbc.connect(connection_string)
+
 
 def fetch_sql_rows():
     # Read route-month aggregates from Azure SQL."""
@@ -66,16 +70,11 @@ def fetch_sql_rows():
         cursor = connection.cursor()
         cursor.execute(query)
 
-        column_names = [
-            column[0] for column in cursor.description
-        ]
+        column_names = [column[0] for column in cursor.description]
 
         results = cursor.fetchall()
 
-        rows = [
-            dict(zip(column_names, row))
-            for row in results
-        ]
+        rows = [dict(zip(column_names, row, strict=True)) for row in results]
 
     return rows
 
@@ -100,9 +99,7 @@ def prepare_rows_for_transform(sql_rows):
                 prepared_row[field] = float(value)
 
         prepared_row["completed_flights"] = (
-            prepared_row["flights"]
-            - prepared_row["cancelled"]
-            - prepared_row["diverted"]
+            prepared_row["flights"] - prepared_row["cancelled"] - prepared_row["diverted"]
         )
 
         prepared_rows.append(prepared_row)
