@@ -13,7 +13,7 @@ import logging
 
 import azure.functions as func
 
-from etl import airports, bts, graph, noaa
+from etl import airports, bts, graph, noaa, cosmos_sync
 from etl.common import parse_month_key, parse_year
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
@@ -72,3 +72,25 @@ def noaa_load(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route="graph/load", methods=["POST"])
 def graph_load(req: func.HttpRequest) -> func.HttpResponse:
     return _run("graph_load", graph.load_route_edges, req, _year)
+
+
+@app.route(route="cosmos/sync", methods=["POST"])
+def cosmos_sync_route(req: func.HttpRequest) -> func.HttpResponse:
+    """Synchronize Azure SQL route summaries to Cosmos DB."""
+
+    try:
+        result = cosmos_sync.sync_routes_to_cosmos()
+
+        return _json({
+            "step": "cosmos_sync",
+            "status": "succeeded",
+            **result
+        })
+
+    except Exception:
+        logging.exception("Cosmos DB synchronization failed")
+
+        return _json({
+            "step": "cosmos_sync",
+            "status": "failed"
+        }, 500)

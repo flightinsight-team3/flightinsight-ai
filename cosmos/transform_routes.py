@@ -4,6 +4,7 @@ from pathlib import Path
 from collections import defaultdict
 
 
+
 def group_route_rows(rows):
     # Input grain: route × airline × month (one SQL row per combination)
     # Group by origin, destination, and month_key
