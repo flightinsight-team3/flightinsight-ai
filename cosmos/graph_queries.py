@@ -1,16 +1,12 @@
 import json
 from pathlib import Path
 
-DATA_FILE = (
-    Path(__file__).resolve().parent.parent
-    / "data"
-    / "sample_graph.json"
-)
+DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "sample_graph.json"
 
 
 def find_alternative_routes(origin, dest):
     # Read the airport network
-    with open(DATA_FILE, "r", encoding="utf-8") as file:
+    with open(DATA_FILE, encoding="utf-8") as file:
         graph = json.load(file)
 
     origin = origin.upper()
@@ -31,27 +27,22 @@ def find_alternative_routes(origin, dest):
 
         # Find the second flight leg
         for second_leg in routes:
-            if (
-                second_leg["origin"] == connecting_airport
-                and second_leg["dest"] == dest
-            ):
-                alternatives.append({
-                    "origin": origin,
-                    "connection": connecting_airport,
-                    "dest": dest,
-                    "path": [
-                        origin,
-                        connecting_airport,
-                        dest
-                    ],
-                    "stops": 1
-                })
+            if second_leg["origin"] == connecting_airport and second_leg["dest"] == dest:
+                alternatives.append(
+                    {
+                        "origin": origin,
+                        "connection": connecting_airport,
+                        "dest": dest,
+                        "path": [origin, connecting_airport, dest],
+                        "stops": 1,
+                    }
+                )
 
     return {
         "origin": origin,
         "dest": dest,
         "alternative_routes": alternatives,
-        "count": len(alternatives)
+        "count": len(alternatives),
     }
 
 

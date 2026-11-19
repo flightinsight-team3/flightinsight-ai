@@ -1,4 +1,5 @@
 import os
+
 from azure.cosmos import CosmosClient
 
 
@@ -11,10 +12,7 @@ def get_route_delay_stats(origin, dest, start_month, end_month):
     """
 
     # Step 1: Connect to Azure Cosmos DB
-    client = CosmosClient(
-        os.environ["COSMOS_ENDPOINT"],
-        credential=os.environ["COSMOS_KEY"]
-    )
+    client = CosmosClient(os.environ["COSMOS_ENDPOINT"], credential=os.environ["COSMOS_KEY"])
 
     # Step 2: Select the database and container
     database = client.get_database_client("flightinsight")
@@ -43,16 +41,10 @@ def get_route_delay_stats(origin, dest, start_month, end_month):
         {"name": "@origin", "value": origin},
         {"name": "@dest", "value": dest},
         {"name": "@start_month", "value": start_month},
-        {"name": "@end_month", "value": end_month}
+        {"name": "@end_month", "value": end_month},
     ]
 
-    results = list(
-        container.query_items(
-            query=query,
-            parameters=parameters,
-            partition_key=origin
-        )
-    )
+    results = list(container.query_items(query=query, parameters=parameters, partition_key=origin))
 
     # Step 5: Sort by month
     return sorted(results, key=lambda doc: int(doc["month_key"]))

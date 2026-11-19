@@ -1,13 +1,12 @@
+import csv
 import os
 from pathlib import Path
 
 from azure.cosmos import CosmosClient
+from transform_routes import build_route_documents, group_route_rows
 
 # Step 1: Connect to Azure Cosmos DB
-client = CosmosClient(
-    os.environ["COSMOS_ENDPOINT"],
-    credential=os.environ["COSMOS_KEY"]
-)
+client = CosmosClient(os.environ["COSMOS_ENDPOINT"], credential=os.environ["COSMOS_KEY"])
 
 # Step 2: Select the existing database and container
 database = client.get_database_client("flightinsight")
@@ -24,8 +23,7 @@ csv_path = Path(__file__).parent / "route_airline_monthly_202401.csv"
 print("CSV file exists:", csv_path.exists())
 
 # Step 5: Transform CSV rows into route summary documents
-from transform_routes import group_route_rows, build_route_documents
-import csv
+
 
 rows = []
 
@@ -33,25 +31,31 @@ with open(csv_path, newline="", encoding="utf-8-sig") as file:
     reader = csv.DictReader(file)
 
     for row in reader:
-        rows.append({
-            "route_key": int(row["route_key"]),
-            "origin": row["origin"],
-            "dest": row["dest"],
-            "month_key": int(row["month_key"]),
-            "carrier_code": row["carrier_code"],
-            "flights": int(row["flights"]),
-            "cancelled": int(row["cancelled"]),
-            "diverted": int(row["diverted"]),
-            "completed_flights": (
-                int(row["flights"])
-                - int(row["cancelled"])
-                - int(row["diverted"])
-            ),
-            "on_time_rate": float(row["on_time_rate"]) if row["on_time_rate"] else None,
-            "avg_arr_delay_min": float(row["avg_arr_delay_min"]) if row["avg_arr_delay_min"] else None,
-            "p90_arr_delay_min": float(row["p90_arr_delay_min"]) if row["p90_arr_delay_min"] else None,
-            "weather_delay_share": float(row["weather_delay_share"]) if row["weather_delay_share"] else None,
-        })
+        rows.append(
+            {
+                "route_key": int(row["route_key"]),
+                "origin": row["origin"],
+                "dest": row["dest"],
+                "month_key": int(row["month_key"]),
+                "carrier_code": row["carrier_code"],
+                "flights": int(row["flights"]),
+                "cancelled": int(row["cancelled"]),
+                "diverted": int(row["diverted"]),
+                "completed_flights": (
+                    int(row["flights"]) - int(row["cancelled"]) - int(row["diverted"])
+                ),
+                "on_time_rate": float(row["on_time_rate"]) if row["on_time_rate"] else None,
+                "avg_arr_delay_min": float(row["avg_arr_delay_min"])
+                if row["avg_arr_delay_min"]
+                else None,
+                "p90_arr_delay_min": float(row["p90_arr_delay_min"])
+                if row["p90_arr_delay_min"]
+                else None,
+                "weather_delay_share": float(row["weather_delay_share"])
+                if row["weather_delay_share"]
+                else None,
+            }
+        )
 
 grouped = group_route_rows(rows)
 documents = build_route_documents(grouped)
@@ -79,8 +83,7 @@ print("Uploaded document ID:", result["id"])
 print("\nVerifying uploaded document...")
 
 saved_document = container.read_item(
-    item=test_document["id"],
-    partition_key=test_document["origin"]
+    item=test_document["id"], partition_key=test_document["origin"]
 )
 
 print("Read back document ID:", saved_document["id"])
@@ -89,9 +92,7 @@ print("Flights:", saved_document["totals"]["flights"])
 
 # Compare the original document with the cloud document
 for field in ["id", "route_key", "origin", "dest", "month_key", "totals", "by_airline"]:
-    assert saved_document[field] == test_document[field], (
-        f"Mismatch in field: {field}"
-    )
+    assert saved_document[field] == test_document[field], f"Mismatch in field: {field}"
 
 print("Verification passed! Local JSON matches Cosmos DB!")
 
@@ -136,19 +137,12 @@ print("\nChecking document count in Cosmos DB...")
 
 query = "SELECT VALUE COUNT(1) FROM c"
 
-result = list(
-    container.query_items(
-        query=query,
-        enable_cross_partition_query=True
-    )
-)
+result = list(container.query_items(query=query, enable_cross_partition_query=True))
 
 cloud_count = result[0]
 
 print("Documents in Cosmos DB:", cloud_count)
 
-assert cloud_count == len(documents), (
-    f"Expected {len(documents)} documents, found {cloud_count}"
-)
+assert cloud_count == len(documents), f"Expected {len(documents)} documents, found {cloud_count}"
 
 print("Cloud document count verified!")

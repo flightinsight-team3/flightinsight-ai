@@ -1,22 +1,17 @@
 import csv
 import json
-from pathlib import Path
 from collections import defaultdict
-
+from pathlib import Path
 
 
 def group_route_rows(rows):
     # Input grain: route × airline × month (one SQL row per combination)
     # Group by origin, destination, and month_key
-    # Output: (origin, dest, month_key) -> list of airline-level rows   
+    # Output: (origin, dest, month_key) -> list of airline-level rows
     grouped = defaultdict(list)
 
     for row in rows:
-        key = (
-            row["origin"],
-            row["dest"],
-            row["month_key"]
-        )
+        key = (row["origin"], row["dest"], row["month_key"])
 
         grouped[key].append(row)
 
@@ -30,30 +25,22 @@ def build_route_documents(grouped):
     documents = []
 
     for (origin, dest, month_key), rows in grouped.items():
-
         total_flights = sum(row["flights"] for row in rows)
         total_cancelled = sum(row["cancelled"] for row in rows)
         total_diverted = sum(row["diverted"] for row in rows)
         total_completed = sum(row["completed_flights"] for row in rows)
 
-        def weighted_average(field):
+        def weighted_average(field, rows=rows):
             valid_rows = [
-                row for row in rows
-                if row[field] is not None
-                and row["completed_flights"] > 0
+                row for row in rows if row[field] is not None and row["completed_flights"] > 0
             ]
 
-            total_weight = sum(
-                row["completed_flights"] for row in valid_rows
-            )
+            total_weight = sum(row["completed_flights"] for row in valid_rows)
 
             if total_weight == 0:
                 return None
 
-            result = sum(
-                row[field] * row["completed_flights"]
-                for row in valid_rows
-            ) / total_weight
+            result = sum(row[field] * row["completed_flights"] for row in valid_rows) / total_weight
 
             return round(result, 4)
 
@@ -63,7 +50,6 @@ def build_route_documents(grouped):
             "origin": origin,
             "dest": dest,
             "month_key": month_key,
-
             "totals": {
                 "flights": total_flights,
                 "cancelled": total_cancelled,
@@ -72,9 +58,8 @@ def build_route_documents(grouped):
                 "on_time_rate": weighted_average("on_time_rate"),
                 "avg_arr_delay_min": weighted_average("avg_arr_delay_min"),
                 "cancel_rate": round(total_cancelled / total_flights, 4) if total_flights else None,
-                "divert_rate": round(total_diverted / total_flights, 4) if total_flights else None
+                "divert_rate": round(total_diverted / total_flights, 4) if total_flights else None,
             },
-
             "by_airline": [
                 {
                     "carrier_code": row["carrier_code"],
@@ -85,10 +70,10 @@ def build_route_documents(grouped):
                     "on_time_rate": row["on_time_rate"],
                     "avg_arr_delay_min": row["avg_arr_delay_min"],
                     "p90_arr_delay_min": row["p90_arr_delay_min"],
-                    "weather_delay_share": row["weather_delay_share"]
+                    "weather_delay_share": row["weather_delay_share"],
                 }
                 for row in rows
-            ]
+            ],
         }
 
         documents.append(document)
@@ -98,7 +83,6 @@ def build_route_documents(grouped):
 
 # Test using real SQL query results exported to CSV
 if __name__ == "__main__":
-
     csv_path = Path(__file__).parent / "route_airline_monthly_202401.csv"
 
     sample_rows = []
@@ -107,23 +91,29 @@ if __name__ == "__main__":
         reader = csv.DictReader(file)
 
         for row in reader:
-            sample_rows.append({
-                "route_key": int(row["route_key"]),
-                "origin": row["origin"],
-                "dest": row["dest"],
-                "month_key": int(row["month_key"]),
-                "carrier_code": row["carrier_code"],
-                "flights": int(row["flights"]),
-                "cancelled": int(row["cancelled"]),
-                "diverted": int(row["diverted"]),
-                "completed_flights": int(row["completed_flights"]),
-                "on_time_rate": float(row["on_time_rate"]) if row["on_time_rate"] else None,
-                "avg_arr_delay_min": float(row["avg_arr_delay_min"]) if row["avg_arr_delay_min"] else None,
-                "p90_arr_delay_min": float(row["p90_arr_delay_min"]) if row["p90_arr_delay_min"] else None,
-                "weather_delay_share": float(row["weather_delay_share"]) if row["weather_delay_share"] else None
-            })
-
-
+            sample_rows.append(
+                {
+                    "route_key": int(row["route_key"]),
+                    "origin": row["origin"],
+                    "dest": row["dest"],
+                    "month_key": int(row["month_key"]),
+                    "carrier_code": row["carrier_code"],
+                    "flights": int(row["flights"]),
+                    "cancelled": int(row["cancelled"]),
+                    "diverted": int(row["diverted"]),
+                    "completed_flights": int(row["completed_flights"]),
+                    "on_time_rate": float(row["on_time_rate"]) if row["on_time_rate"] else None,
+                    "avg_arr_delay_min": float(row["avg_arr_delay_min"])
+                    if row["avg_arr_delay_min"]
+                    else None,
+                    "p90_arr_delay_min": float(row["p90_arr_delay_min"])
+                    if row["p90_arr_delay_min"]
+                    else None,
+                    "weather_delay_share": float(row["weather_delay_share"])
+                    if row["weather_delay_share"]
+                    else None,
+                }
+            )
 
     grouped = group_route_rows(sample_rows)
     documents = build_route_documents(grouped)
@@ -176,4 +166,3 @@ if __name__ == "__main__":
         json.dump(documents[0], file, indent=2)
 
     print("Test document saved:", output_path)
-
