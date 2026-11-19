@@ -1,8 +1,10 @@
 import os
-import pyodbc
 from decimal import Decimal
-from transform_routes import group_route_rows, build_route_documents
+
+import pyodbc
 from azure.cosmos import CosmosClient
+from transform_routes import build_route_documents, group_route_rows
+
 
 def fetch_sql_rows():
     # Read the latest route-month aggregates from Azure SQL.
@@ -51,12 +53,10 @@ def fetch_sql_rows():
 
         results = cursor.fetchall()
 
-        rows = [
-            dict(zip(column_names, row))
-            for row in results
-        ]
+        rows = [dict(zip(column_names, row, strict=True)) for row in results]
 
         return rows
+
 
 def prepare_rows_for_transform(sql_rows):
     # Convert SQL rows into the format expected by transform_routes.py.
@@ -80,9 +80,7 @@ def prepare_rows_for_transform(sql_rows):
 
         # Calculate completed flights
         prepared_row["completed_flights"] = (
-            prepared_row["flights"]
-            - prepared_row["cancelled"]
-            - prepared_row["diverted"]
+            prepared_row["flights"] - prepared_row["cancelled"] - prepared_row["diverted"]
         )
 
         prepared_rows.append(prepared_row)
@@ -136,14 +134,9 @@ if __name__ == "__main__":
 
     print("SQL → JSON transformation successful!")
 
-    
-    
     print("\nConnecting to Cosmos DB...")
 
-    cosmos_client = CosmosClient(
-        os.environ["COSMOS_ENDPOINT"],
-        credential=os.environ["COSMOS_KEY"]
-    )
+    cosmos_client = CosmosClient(os.environ["COSMOS_ENDPOINT"], credential=os.environ["COSMOS_KEY"])
 
     database = cosmos_client.get_database_client("flightinsight")
     container = database.get_container_client("route_summaries")
@@ -157,8 +150,7 @@ if __name__ == "__main__":
 
     cloud_count = list(
         container.query_items(
-            query="SELECT VALUE COUNT(1) FROM c",
-            enable_cross_partition_query=True
+            query="SELECT VALUE COUNT(1) FROM c", enable_cross_partition_query=True
         )
     )[0]
 
@@ -168,19 +160,12 @@ if __name__ == "__main__":
     # Safety switch: True = preview only, False = upload
     DRY_RUN = True
 
-    upsert_route_documents(
-        container=container,
-        documents=documents,
-        dry_run=DRY_RUN
-    )
+    upsert_route_documents(container=container, documents=documents, dry_run=DRY_RUN)
 
     if not DRY_RUN:
         first_doc = documents[0]
 
-        saved_doc = container.read_item(
-            item=first_doc["id"],
-            partition_key=first_doc["origin"]
-        )
+        saved_doc = container.read_item(item=first_doc["id"], partition_key=first_doc["origin"])
 
         print("Verified document ID:", saved_doc["id"])
         print("Verified flights:", saved_doc["totals"]["flights"])
