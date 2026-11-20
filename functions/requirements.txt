@@ -5,6 +5,7 @@ azure-storage-file-datalake
 azure-keyvault-secrets
 azure-cosmos
 gremlinpython
+python-dotenv
 pandas>=2.2
 pyarrow
 pyodbc
