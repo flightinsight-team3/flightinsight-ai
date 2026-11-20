@@ -1,4 +1,5 @@
 import os
+
 from azure.cosmos import CosmosClient
 
 

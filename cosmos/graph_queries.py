@@ -6,7 +6,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from gremlin_python.driver import client, serializer
 
-
 # Load existing Gremlin connection settings.
 ENV_FILE = (
     Path(__file__).resolve().parent.parent
