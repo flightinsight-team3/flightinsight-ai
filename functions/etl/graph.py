@@ -293,12 +293,31 @@ def upsert_route_edge(gremlin_client, edge: dict) -> str:
     if existing:
         return "skipped"
 
-    # Find the source and destination airport vertices.
-    # Their partition keys may differ.
+    # Resolve each airport's partition key before creating the edge.
+    partition_keys = {}
+
+    for airport_id in (edge["outV"], edge["inV"]):
+        matches = gremlin_client.submit(
+            "g.V().has('airport', 'id', airport_id).values('pk')",
+            bindings={"airport_id": airport_id},
+        ).all().result()
+
+        if len(matches) != 1:
+            raise ValueError(
+                f"Expected one partition key for {airport_id}, "
+                f"got {len(matches)}"
+            )
+
+        partition_keys[airport_id] = matches[0]
+
     query = """
         g.V().has('airport', 'id', origin)
+         .has('pk', origin_pk)
          .addE('route')
-         .to(g.V().has('airport', 'id', destination))
+         .to(
+             g.V().has('airport', 'id', destination)
+              .has('pk', destination_pk)
+         )
          .property('id', edge_id)
          .property('route_key', route_key)
          .property('year', year)
@@ -315,7 +334,9 @@ def upsert_route_edge(gremlin_client, edge: dict) -> str:
 
     bindings = {
         "origin": edge["outV"],
+        "origin_pk": partition_keys[edge["outV"]],
         "destination": edge["inV"],
+        "destination_pk": partition_keys[edge["inV"]],
         "edge_id": edge_id,
         "route_key": edge["route_key"],
         "year": edge["year"],
@@ -331,5 +352,159 @@ def upsert_route_edge(gremlin_client, edge: dict) -> str:
     }
 
     gremlin_client.submit(query, bindings=bindings).all().result()
+
+    return "created"
+
+
+
+def upsert_airline_vertex(gremlin_client, vertex: dict) -> str:
+    # Create an airline vertex if absent; otherwise skip it.
+
+    airline_id = vertex["id"]
+    partition_key = vertex["pk"]
+
+    # Check whether this airline vertex already exists.
+    existing = gremlin_client.submit(
+        "g.V().has('airline', 'id', airline_id)"
+        ".has('pk', partition_key).count()",
+        bindings={
+            "airline_id": airline_id,
+            "partition_key": partition_key,
+        },
+    ).all().result()[0]
+
+    if existing:
+        return "skipped"
+
+    # Create one airline vertex.
+    query = """
+        g.addV('airline')
+         .property('id', airline_id)
+         .property('pk', partition_key)
+         .property('airline_name', airline_name)
+    """
+
+    gremlin_client.submit(
+        query,
+        bindings={
+            "airline_id": airline_id,
+            "partition_key": partition_key,
+            "airline_name": vertex["airline_name"],
+        },
+    ).all().result()
+
+    return "created"
+
+
+def build_operates_at_edge(row: dict, year: int) -> dict:
+    # Build an annual airline-to-airport edge from SQL statistics.
+
+    carrier = str(row["carrier_code"] or "").strip().upper()
+    airport = str(row["iata_code"] or "").strip().upper()
+
+    if not carrier or not airport:
+        raise ValueError("Airline and airport codes are required")
+
+    flights = int(row["flights"])
+    share = float(row["share_of_airport"])
+
+    if flights <= 0:
+        raise ValueError("Flights must be positive")
+
+    if not 0 < share <= 1:
+        raise ValueError("share_of_airport must be between 0 and 1")
+
+    return {
+        "id": f"{carrier}-{airport}-{int(year)}",
+        "label": "operates_at",
+        "airline_id": carrier,
+        "airport_id": airport,
+        "flights": flights,
+        "share_of_airport": share,
+        "year": int(year),
+    }
+
+
+def upsert_operates_at_edge(gremlin_client, edge: dict) -> str:
+    # Create or update one annual airline-to-airport edge.
+
+    edge_id = edge["id"]
+    airline_id = edge["airline_id"]
+    airport_id = edge["airport_id"]
+
+    # Check whether this edge already exists.
+    existing = gremlin_client.submit(
+        "g.E().has('id', edge_id).count()",
+        bindings={"edge_id": edge_id},
+    ).all().result()[0]
+
+    if existing > 1:
+        raise ValueError(f"Duplicate operates_at edge ID: {edge_id}")
+
+    # If the edge exists, refresh its annual statistics.
+    if existing == 1:
+        query = """
+            g.E().has('id', edge_id)
+             .property('flights', flights)
+             .property('share_of_airport', share_of_airport)
+             .property('year', year)
+        """
+
+        gremlin_client.submit(
+            query,
+            bindings={
+                "edge_id": edge_id,
+                "flights": edge["flights"],
+                "share_of_airport": edge["share_of_airport"],
+                "year": edge["year"],
+            },
+        ).all().result()
+
+        return "updated"
+
+    # Find the airport's partition key.
+    airport_partitions = gremlin_client.submit(
+        """
+        g.V().has('airport', 'id', airport_id)
+         .values('pk')
+        """,
+        bindings={"airport_id": airport_id},
+    ).all().result()
+
+    if len(airport_partitions) != 1:
+        raise ValueError(
+            f"Expected one airport vertex for {airport_id}, "
+            f"found {len(airport_partitions)}"
+        )
+
+    airport_pk = airport_partitions[0]
+
+    # Create an edge from the airline to the airport.
+    query = """
+        g.V().has('airline', 'id', airline_id)
+         .has('pk', 'airline')
+         .addE('operates_at')
+         .to(
+             g.V().has('airport', 'id', airport_id)
+              .has('pk', airport_pk)
+         )
+         .property('id', edge_id)
+         .property('flights', flights)
+         .property('share_of_airport', share_of_airport)
+         .property('year', year)
+    """
+
+    gremlin_client.submit(
+        query,
+        bindings={
+            "airline_id": airline_id,
+            "airport_id": airport_id,
+            "airport_pk": airport_pk,
+            "edge_id": edge_id,
+            "flights": edge["flights"],
+            "share_of_airport": edge["share_of_airport"],
+            "year": edge["year"],
+        },
+    ).all().result()
 
     return "created"
