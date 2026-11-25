@@ -64,11 +64,6 @@ def noaa_ingest(req: func.HttpRequest) -> func.HttpResponse:
     return _run("noaa_ingest", noaa.ingest_month, req, _month)
 
 
-@app.route(route="noaa/load", methods=["POST"])
-def noaa_load(req: func.HttpRequest) -> func.HttpResponse:
-    return _run("noaa_load", noaa.load_month, req, _month)
-
-
 @app.route(route="graph/load", methods=["POST"])
 def graph_load(req: func.HttpRequest) -> func.HttpResponse:
     return _run("graph_load", graph.load_route_edges, req, _year)
