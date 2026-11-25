@@ -1,9 +1,12 @@
 import csv
 import os
+import sys
 from pathlib import Path
 
 from azure.cosmos import CosmosClient
-from transform_routes import build_route_documents, group_route_rows
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "functions"))
+from etl.transform_routes import build_route_documents, group_route_rows  # noqa: E402
 
 # Step 1: Connect to Azure Cosmos DB
 client = CosmosClient(os.environ["COSMOS_ENDPOINT"], credential=os.environ["COSMOS_KEY"])

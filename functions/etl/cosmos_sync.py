@@ -1,41 +1,21 @@
 # Azure SQL to Cosmos DB NoSQL synchronization.
-import os
 from decimal import Decimal
 
-import pyodbc
-from azure.cosmos import CosmosClient
-
+from etl.common import setting, sql_connection
 from etl.transform_routes import build_route_documents, group_route_rows
 
 
 def get_cosmos_container():
-    """Connect to the existing route_summaries container."""
+    """Connect to the existing route_summaries container with the app's managed identity
+    (or your `az login` locally, if your account has the Cosmos DB Built-in Data Contributor
+    role — see infra/nosql.bicep `dataContributorPrincipalIds`)."""
+    from azure.cosmos import CosmosClient
+    from azure.identity import DefaultAzureCredential
 
-    client = CosmosClient(
-        os.environ["COSMOS_ENDPOINT"],
-        credential=os.environ["COSMOS_KEY"],
-    )
-
-    database = client.get_database_client("flightinsight")
+    client = CosmosClient(setting("COSMOS_NOSQL_ENDPOINT"), credential=DefaultAzureCredential())
+    database = client.get_database_client(setting("COSMOS_NOSQL_DATABASE"))
 
     return database.get_container_client("route_summaries")
-
-
-def get_sql_connection():
-    # Connect to Azure SQL Database.
-
-    connection_string = (
-        "DRIVER={ODBC Driver 18 for SQL Server};"
-        f"SERVER=tcp:{os.environ['AZURE_SQL_SERVER']},1433;"
-        f"DATABASE={os.environ['AZURE_SQL_DATABASE']};"
-        f"UID={os.environ['AZURE_SQL_USER']};"
-        f"PWD={os.environ['AZURE_SQL_PASSWORD']};"
-        "Encrypt=yes;"
-        "TrustServerCertificate=no;"
-        "Connection Timeout=60;"
-    )
-
-    return pyodbc.connect(connection_string)
 
 
 def fetch_sql_rows():
@@ -66,7 +46,7 @@ def fetch_sql_rows():
             ON a.airline_key = airline.airline_key
     """
 
-    with get_sql_connection() as connection:
+    with sql_connection() as connection:
         cursor = connection.cursor()
         cursor.execute(query)
 

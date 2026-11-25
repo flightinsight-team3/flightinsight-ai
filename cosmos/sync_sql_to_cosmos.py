@@ -1,9 +1,13 @@
 import os
+import sys
 from decimal import Decimal
+from pathlib import Path
 
 import pyodbc
 from azure.cosmos import CosmosClient
-from transform_routes import build_route_documents, group_route_rows
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "functions"))
+from etl.transform_routes import build_route_documents, group_route_rows  # noqa: E402
 
 
 def fetch_sql_rows():
