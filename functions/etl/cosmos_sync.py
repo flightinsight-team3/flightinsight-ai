@@ -18,8 +18,8 @@ def get_cosmos_container():
     return database.get_container_client("route_summaries")
 
 
-def fetch_sql_rows():
-    # Read route-month aggregates from Azure SQL."""
+def fetch_sql_rows(database: str = "prod"):
+    # Read route-month aggregates from Azure SQL (prod flightinsight, or dev flightinsight-dev).
 
     query = """
         SELECT
@@ -46,7 +46,7 @@ def fetch_sql_rows():
             ON a.airline_key = airline.airline_key
     """
 
-    with sql_connection() as connection:
+    with sql_connection(database) as connection:
         cursor = connection.cursor()
         cursor.execute(query)
 
@@ -97,11 +97,11 @@ def build_cosmos_documents(sql_rows):
     return documents
 
 
-def sync_routes_to_cosmos():
-    # Synchronize route summaries from Azure SQL to Cosmos DB.
+def sync_routes_to_cosmos(database: str = "prod"):
+    # Synchronize route summaries from Azure SQL (prod or dev) to Cosmos DB.
 
-    print("Fetching data from Azure SQL...")
-    sql_rows = fetch_sql_rows()
+    print(f"Fetching data from Azure SQL ({database})...")
+    sql_rows = fetch_sql_rows(database)
 
     print("SQL rows fetched:", len(sql_rows))
 
