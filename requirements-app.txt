@@ -1,0 +1,7 @@
+# Laptop app: LangChain agent + Streamlit UI (app/). Install on top of requirements-dev.txt
+# and functions/requirements.txt (azure-cosmos, azure-identity, requests).
+langchain>=1.5
+langgraph>=1.2
+langchain-google-genai>=4.5
+langchain-ollama>=1.1
+streamlit>=1.67
