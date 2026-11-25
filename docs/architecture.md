@@ -40,7 +40,7 @@ flowchart TB
 ## Monthly pipeline (one ADF run per month_key)
 
 1. `bts/ingest`, `noaa/ingest` (Functions) — download to `raw/`, clean + UTC + validate to `clean/`
-2. `bts/load`, `noaa/load` (Functions) — delete-and-reload the month in SQL staging
+2. Copy activities (ADF, not Functions) — delete-and-reload the month in SQL staging
 3. Stored Procedure activities — staging → dimensions → facts → `agg_route_monthly`
 4. Copy activity — `vw_route_summary` → Cosmos `route_summaries`
 5. `graph/load` (Function) — yearly route edges → Gremlin

@@ -431,10 +431,3 @@ def ingest_month(
         "stations_file": stations_location,
         "rejected_file": rejected_location,
     }
-
-
-def load_month(month_key: int) -> dict:
-    """Placeholder: SQL load is an ADF Copy activity, not a Function call."""
-    raise NotImplementedError(
-        "SQL load is handled by an ADF Copy activity reading the clean/noaa/<month>/*.parquet files"
-    )
