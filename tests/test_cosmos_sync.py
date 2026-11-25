@@ -56,12 +56,29 @@ class FakeConnection:
 
 def test_fetch_sql_rows_uses_the_shared_sql_connection(monkeypatch):
     cursor = FakeCursor([sql_row()])
-    monkeypatch.setattr(cosmos_sync, "sql_connection", lambda: FakeConnection(cursor))
+    monkeypatch.setattr(
+        cosmos_sync, "sql_connection", lambda database="prod": FakeConnection(cursor)
+    )
 
     rows = cosmos_sync.fetch_sql_rows()
 
     assert rows == [dict(zip(COLUMNS, sql_row(), strict=True))]
     assert "agg_route_monthly" in cursor.last_query
+
+
+def test_fetch_sql_rows_passes_the_database_through(monkeypatch):
+    cursor = FakeCursor([sql_row()])
+    seen = {}
+
+    def fake_sql_connection(database="prod"):
+        seen["database"] = database
+        return FakeConnection(cursor)
+
+    monkeypatch.setattr(cosmos_sync, "sql_connection", fake_sql_connection)
+
+    cosmos_sync.fetch_sql_rows("dev")
+
+    assert seen["database"] == "dev"
 
 
 def test_prepare_rows_for_transform_converts_decimals_and_adds_completed_flights():
@@ -114,7 +131,9 @@ def test_get_cosmos_container_reads_managed_identity_settings_not_a_key(monkeypa
 def test_sync_routes_to_cosmos_groups_airlines_into_one_document_per_route(monkeypatch):
     rows = [sql_row(), sql_row(carrier_code="DL")]
     cursor = FakeCursor(rows)
-    monkeypatch.setattr(cosmos_sync, "sql_connection", lambda: FakeConnection(cursor))
+    monkeypatch.setattr(
+        cosmos_sync, "sql_connection", lambda database="prod": FakeConnection(cursor)
+    )
 
     upserted = []
 
@@ -133,7 +152,9 @@ def test_sync_routes_to_cosmos_groups_airlines_into_one_document_per_route(monke
 
 def test_sync_routes_to_cosmos_counts_upsert_failures_instead_of_raising(monkeypatch):
     cursor = FakeCursor([sql_row(), sql_row(dest="SFO")])
-    monkeypatch.setattr(cosmos_sync, "sql_connection", lambda: FakeConnection(cursor))
+    monkeypatch.setattr(
+        cosmos_sync, "sql_connection", lambda database="prod": FakeConnection(cursor)
+    )
 
     class FailingContainer:
         def upsert_item(self, body):

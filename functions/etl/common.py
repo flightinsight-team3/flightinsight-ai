@@ -45,8 +45,13 @@ def lake_client():
     return DataLakeServiceClient(setting("DATA_LAKE_URL"), credential=DefaultAzureCredential())
 
 
-def sql_connection():
-    """New pyodbc connection to the prod database. Close it when done so the DB can auto-pause."""
+def sql_connection(database: str = "prod"):
+    """New pyodbc connection to the prod or dev database (SQL_CONNECTION_STRING /
+    SQL_CONNECTION_STRING_DEV). Close it when done so the DB can auto-pause."""
+    if database not in ("prod", "dev"):
+        raise ValueError(f"database must be 'prod' or 'dev', got {database!r}")
+
     import pyodbc
 
-    return pyodbc.connect(setting("SQL_CONNECTION_STRING"), autocommit=False)
+    setting_name = "SQL_CONNECTION_STRING" if database == "prod" else "SQL_CONNECTION_STRING_DEV"
+    return pyodbc.connect(setting(setting_name), autocommit=False)

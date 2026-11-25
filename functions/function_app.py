@@ -71,10 +71,22 @@ def graph_load(req: func.HttpRequest) -> func.HttpResponse:
 
 @app.route(route="cosmos/sync", methods=["POST"])
 def cosmos_sync_route(req: func.HttpRequest) -> func.HttpResponse:
-    # Synchronize Azure SQL route summaries to Cosmos DB."""
+    # Synchronize Azure SQL route summaries to Cosmos DB. Body is optional:
+    # {"database": "dev"} reads flightinsight-dev instead of the prod flightinsight.
 
     try:
-        result = cosmos_sync.sync_routes_to_cosmos()
+        body = req.get_json()
+    except ValueError:
+        body = {}
+    database = body.get("database", "prod")
+    if database not in ("prod", "dev"):
+        return _json(
+            {"step": "cosmos_sync", "error": f"database must be 'prod' or 'dev', got {database!r}"},
+            400,
+        )
+
+    try:
+        result = cosmos_sync.sync_routes_to_cosmos(database=database)
 
         return _json({"step": "cosmos_sync", "status": "succeeded", **result})
 
