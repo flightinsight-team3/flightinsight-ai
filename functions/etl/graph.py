@@ -10,6 +10,29 @@ Graph model:
 See cosmos/graph-model.md.
 """
 
+import logging
+import math
+import os
+
+from gremlin_python.driver import client, serializer
+
+from etl.cosmos_sync import get_sql_connection
+
+
+def get_gremlin_client():
+    # Connect to the existing Cosmos DB Gremlin graph.
+    host = os.environ["GREMLIN_HOST"]
+    database = os.environ["GREMLIN_DATABASE"]
+    graph = os.environ["GREMLIN_GRAPH"]
+    key = os.environ["GREMLIN_KEY"]
+
+    return client.Client(
+        f"wss://{host}:443/",
+        "g",
+        username=f"/dbs/{database}/colls/{graph}",
+        password=key,
+        message_serializer=serializer.GraphSONSerializersV2d0(),
+    )
 
 def fetch_airports(connection):
     # Read airport data from Azure SQL without modifying it.
@@ -24,6 +47,7 @@ def fetch_airports(connection):
         FROM dbo.dim_airports AS a
         JOIN dbo.dim_geography AS g
             ON a.geo_key = g.geo_key
+        WHERE a.is_top30 = 1
     """
 
     cursor = connection.cursor()
@@ -36,6 +60,74 @@ def fetch_airports(connection):
         for row in cursor.fetchall()
     ]
 
+def fetch_airlines(connection) -> list[dict]:
+    # Read airline data from Azure SQL.
+    query = """
+        SELECT
+            carrier_code,
+            airline_name
+        FROM dbo.dim_airlines
+    """
+
+    cursor = connection.cursor()
+    cursor.execute(query)
+
+    columns = [column[0] for column in cursor.description]
+
+    return [
+        dict(zip(columns, row, strict=True))
+        for row in cursor.fetchall()
+    ]
+
+def fetch_operates_at_stats(connection, year: int) -> list[dict]:
+    # Read annual airline departure statistics by airport.
+    year = int(year)
+
+    if not 2000 <= year <= 2100:
+        raise ValueError("Invalid year")
+
+    query = """
+        WITH airline_airport_stats AS (
+            SELECT
+                a.carrier_code,
+                origin.iata_code,
+                COUNT(*) AS flights
+            FROM dbo.fact_flights AS f
+            JOIN dbo.dim_airlines AS a
+                ON f.airline_key = a.airline_key
+            JOIN dbo.dim_routes AS r
+                ON f.route_key = r.route_key
+            JOIN dbo.dim_airports AS origin
+                ON r.origin_airport_key = origin.airport_key
+            WHERE f.date_key >= ?
+              AND f.date_key < ?
+            GROUP BY
+                a.carrier_code,
+                origin.iata_code
+        )
+        SELECT
+            carrier_code,
+            iata_code,
+            flights,
+            1.0 * flights / NULLIF(
+                SUM(flights) OVER (PARTITION BY iata_code), 0
+            ) AS share_of_airport
+        FROM airline_airport_stats
+        ORDER BY iata_code, carrier_code
+    """
+
+    start_date = year * 10000 + 101
+    end_date = (year + 1) * 10000 + 101
+
+    cursor = connection.cursor()
+    cursor.execute(query, (start_date, end_date))
+
+    columns = [column[0] for column in cursor.description]
+
+    return [
+        dict(zip(columns, row, strict=True))
+        for row in cursor.fetchall()
+    ]
 
 
 def build_airport_vertex(row: dict) -> dict:
@@ -231,8 +323,182 @@ def fetch_route_stats(connection, year: int) -> list[dict]:
     ]
 
 
+def fetch_existing_edges(gremlin_client, label: str, year: int) -> dict:
+    # Read existing annual edges in one query.
+    rows = gremlin_client.submit(
+        "g.E().hasLabel(edge_label).has('year', edge_year)",
+        bindings={
+            "edge_label": label,
+            "edge_year": year,
+        },
+    ).all().result()
+
+    existing = {}
+
+    for row in rows:
+        edge_id = row["id"]
+
+        if edge_id in existing:
+            raise ValueError(f"Duplicate edge ID: {edge_id}")
+
+        existing[edge_id] = row
+
+    return existing
+
+
+def edge_is_unchanged(edge: dict, existing: dict) -> bool:
+    # Compare SQL statistics with existing graph properties.
+    properties = existing.get("properties", {})
+
+    for key, expected in edge.items():
+        if key in {
+            "id", "label", "outV", "inV",
+            "airline_id", "airport_id",
+        }:
+            continue
+
+        if key not in properties:
+            return False
+
+        actual = properties[key]
+
+        if isinstance(expected, float):
+            if not isinstance(actual, (int, float)):
+                return False
+
+            if not math.isclose(
+                actual,
+                expected,
+                rel_tol=1e-9,
+                abs_tol=1e-12,
+            ):
+                return False
+
+        elif actual != expected:
+            return False
+
+    return True
+
+
 def load_route_edges(year: int) -> dict:
-    raise NotImplementedError("graph.load_route_edges")
+    # Synchronize annual graph data from Azure SQL.
+    year = int(year)
+
+    if not 2000 <= year <= 2100:
+        raise ValueError("Invalid year")
+
+    # Read all required data from Azure SQL.
+    connection = get_sql_connection()
+
+    try:
+        airport_rows = fetch_airports(connection)
+        airline_rows = fetch_airlines(connection)
+        route_rows = fetch_route_stats(connection, year)
+        operates_at_rows = fetch_operates_at_stats(connection, year)
+    finally:
+        connection.close()
+
+    # Transform SQL rows into graph records.
+    airport_vertices = [
+        build_airport_vertex(row) for row in airport_rows
+    ]
+
+    airline_vertices = [
+        build_airline_vertex(row) for row in airline_rows
+    ]
+
+    route_edges = [
+        build_route_edge(row, year) for row in route_rows
+    ]
+
+    operates_at_edges = [
+        build_operates_at_edge(row, year)
+        for row in operates_at_rows
+    ]
+
+    if not all([
+        airport_vertices,
+        airline_vertices,
+        route_edges,
+        operates_at_edges,
+    ]):
+        raise ValueError("Missing graph data; refusing to sync.")
+
+    # Track synchronization results.
+    results = {
+        "airport_vertices": {
+            "created": 0, "updated": 0, "skipped": 0
+        },
+        "airline_vertices": {
+            "created": 0, "updated": 0, "skipped": 0
+        },
+        "route_edges": {
+            "created": 0, "updated": 0, "skipped": 0
+        },
+        "operates_at_edges": {
+            "created": 0, "updated": 0, "skipped": 0
+        },
+    }
+
+    gremlin_client = get_gremlin_client()
+
+    try:
+        for vertex in airport_vertices:
+            status = upsert_airport_vertex(gremlin_client, vertex)
+            results["airport_vertices"][status] += 1
+
+        for vertex in airline_vertices:
+            status = upsert_airline_vertex(gremlin_client, vertex)
+            results["airline_vertices"][status] += 1
+
+        # Read existing annual edges before synchronization.
+        existing_routes = fetch_existing_edges(
+            gremlin_client, "route", year
+        )
+
+        existing_operates_at = fetch_existing_edges(
+            gremlin_client, "operates_at", year
+        )
+
+        # Synchronize route edges only when necessary.
+        for edge in route_edges:
+            existing = existing_routes.get(edge["id"])
+
+            if existing is not None and edge_is_unchanged(edge, existing):
+                status = "skipped"
+            else:
+                status = upsert_route_edge(gremlin_client, edge)
+
+            results["route_edges"][status] += 1
+
+        logging.info(
+            "Route synchronization completed: %s",
+            results["route_edges"],
+        )
+
+        # Synchronize airline-to-airport edges only when necessary.
+        for edge in operates_at_edges:
+            existing = existing_operates_at.get(edge["id"])
+
+            if existing is not None and edge_is_unchanged(edge, existing):
+                status = "skipped"
+            else:
+                status = upsert_operates_at_edge(gremlin_client, edge)
+
+            results["operates_at_edges"][status] += 1
+
+        logging.info(
+            "Operates_at synchronization completed: %s",
+            results["operates_at_edges"],
+        )
+
+    finally:
+        gremlin_client.close()
+
+    return {
+        "year": year,
+        **results,
+    }
 
 def upsert_airport_vertex(gremlin_client, vertex: dict) -> str:
     # Create an airport vertex if absent; otherwise skip it.
@@ -290,8 +556,41 @@ def upsert_route_edge(gremlin_client, edge: dict) -> str:
         bindings={"edge_id": edge_id},
     ).all().result()[0]
 
-    if existing:
-        return "skipped"
+
+    if existing > 1:
+        raise ValueError(f"Duplicate route edge ID: {edge_id}")
+
+    if existing == 1:
+        query = """
+            g.E().has('id', edge_id)
+             .property('flights', flights)
+             .property('completed_flights', completed_flights)
+             .property('on_time_flights', on_time_flights)
+             .property('on_time_rate', on_time_rate)
+             .property('avg_arr_delay_min', avg_arr_delay_min)
+             .property('cancel_rate', cancel_rate)
+             .property('distance_mi', distance_mi)
+             .property('first_date_key', first_date_key)
+             .property('last_date_key', last_date_key)
+        """
+
+        gremlin_client.submit(
+            query,
+            bindings={
+                "edge_id": edge_id,
+                "flights": edge["flights"],
+                "completed_flights": edge["completed_flights"],
+                "on_time_flights": edge["on_time_flights"],
+                "on_time_rate": edge["on_time_rate"],
+                "avg_arr_delay_min": edge["avg_arr_delay_min"],
+                "cancel_rate": edge["cancel_rate"],
+                "distance_mi": edge["distance_mi"],
+                "first_date_key": edge["first_date_key"],
+                "last_date_key": edge["last_date_key"],
+            },
+        ).all().result()
+
+        return "updated"
 
     # Resolve each airport's partition key before creating the edge.
     partition_keys = {}
