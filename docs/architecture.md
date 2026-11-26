@@ -62,3 +62,5 @@ ASRS embeddings are a one-off batch run from a laptop, not part of the monthly p
 | No local databases or Docker | Everyone works against the same cloud state; the SQL project is validated in CI without a database |
 | SQL Database Project (declarative) instead of migration scripts | The repo always shows each table's current shape; CI catches broken references; data-loss changes are blocked |
 | Cosmos NoSQL throughput hard-capped at 1000 RU/s | Stays inside the free tier |
+| ADF published via GitHub Actions (`deploy-adf.yml`), not ADF Studio's manual Publish button | Same ARM template either way; running it through CI/CD means no `adf_publish` branch to babysit and no dependency on one person having ADF Studio open |
+| One `PL_Master_Monthly` pipeline chaining ingest → load → `cosmos/sync`, triggered manually per month | The data is a historical backfill with no fixed monthly cadence yet; a schedule trigger can be added later once runs are no longer ad hoc |
