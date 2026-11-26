@@ -1,0 +1,129 @@
+{
+	"name": "PL_Master_Monthly",
+	"properties": {
+		"activities": [
+			{
+				"name": "Run_BTS",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "PL_BTS_Month",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true,
+					"parameters": {
+						"month_key": {
+							"value": "@pipeline().parameters.month_key",
+							"type": "Expression"
+						},
+						"database_name": {
+							"value": "@pipeline().parameters.database_name",
+							"type": "Expression"
+						}
+					}
+				}
+			},
+			{
+				"name": "Run_NOAA",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "PL_NOAA_Month",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true,
+					"parameters": {
+						"month_key": {
+							"value": "@pipeline().parameters.month_key",
+							"type": "Expression"
+						},
+						"database_name": {
+							"value": "@pipeline().parameters.database_name",
+							"type": "Expression"
+						}
+					}
+				}
+			},
+			{
+				"name": "Run_Load_Star",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Run_BTS",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "Run_NOAA",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "PL_Load_Star_Month",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true,
+					"parameters": {
+						"month_key": {
+							"value": "@pipeline().parameters.month_key",
+							"type": "Expression"
+						},
+						"database_name": {
+							"value": "@pipeline().parameters.database_name",
+							"type": "Expression"
+						}
+					}
+				}
+			},
+			{
+				"name": "Cosmos_Sync",
+				"type": "AzureFunctionActivity",
+				"dependsOn": [
+					{
+						"activity": "Run_Load_Star",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 2,
+					"retryIntervalInSeconds": 60,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"functionName": "cosmos/sync",
+					"body": "{\"database\": \"@{if(equals(pipeline().parameters.database_name, 'flightinsight-dev'), 'dev', 'prod')}\"}",
+					"method": "POST"
+				},
+				"linkedServiceName": {
+					"referenceName": "LS_FunctionApp",
+					"type": "LinkedServiceReference"
+				}
+			}
+		],
+		"parameters": {
+			"month_key": {
+				"type": "string",
+				"defaultValue": "202401"
+			},
+			"database_name": {
+				"type": "string",
+				"defaultValue": "flightinsight-dev"
+			}
+		},
+		"annotations": []
+	}
+}

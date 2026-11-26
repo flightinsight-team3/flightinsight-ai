@@ -1,0 +1,76 @@
+name: Deploy ADF pipelines
+
+# Manual only: Actions → Deploy ADF pipelines → Run workflow.
+# Publishes everything under adf/ (pipelines, datasets, linked services, triggers) straight to the
+# shared Data Factory, using the same validate+export ARM template that ADF Studio's "Publish"
+# button generates — this replaces that manual click. See adf/README.md for the authoring workflow
+# (still done visually in ADF Studio, Git-connected to this repo) and docs/azure-cicd-setup.md for
+# the OIDC login this reuses from deploy-infra.yml.
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply changes (unchecked = preview only)
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-adf
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: core
+    env:
+      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install the Data Factory CI/CD utilities
+        # Official Microsoft package that does what ADF Studio's "Publish" button does
+        # (validate + generate the factory's ARM template) without needing the adf_publish branch.
+        run: npm install --no-save @microsoft/azure-data-factory-utilities@1.0.1
+
+      - name: Resolve the Data Factory resource ID
+        run: |
+          FACTORY_ID=$(az datafactory list -g "$RG" --query "[0].id" -o tsv)
+          FACTORY_NAME=$(az datafactory list -g "$RG" --query "[0].name" -o tsv)
+          echo "FACTORY_ID=$FACTORY_ID" >> "$GITHUB_ENV"
+          echo "FACTORY_NAME=$FACTORY_NAME" >> "$GITHUB_ENV"
+
+      - name: Validate pipelines, datasets, linked services and triggers
+        run: node node_modules/@microsoft/azure-data-factory-utilities/lib/index.js validate adf "$FACTORY_ID"
+
+      - name: Export the factory ARM template
+        run: node node_modules/@microsoft/azure-data-factory-utilities/lib/index.js export adf "$FACTORY_ID" export
+
+      - name: Preview changes (what-if)
+        run: |
+          az deployment group what-if -g "$RG" \
+            --template-file export/ARMTemplateForFactory.json \
+            --parameters export/ARMTemplateParametersForFactory.json \
+            --parameters factoryName="$FACTORY_NAME"
+
+      - name: Deploy
+        if: ${{ inputs.apply }}
+        run: |
+          az deployment group create -g "$RG" \
+            --template-file export/ARMTemplateForFactory.json \
+            --parameters export/ARMTemplateParametersForFactory.json \
+            --parameters factoryName="$FACTORY_NAME" \
+            -n "adf-${{ github.run_number }}"
